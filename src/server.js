@@ -10,6 +10,7 @@ const { requireAuth } = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const agentsRoutes = require('./routes/agents');
 const metaRoutes = require('./routes/meta');
+const periodRoutes = require('./routes/period');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -33,6 +34,7 @@ app.use('/api', authRoutes);
 // Routes με auth
 app.use('/api/agents', requireAuth, agentsRoutes);
 app.use('/api', requireAuth, metaRoutes);
+app.use('/api', requireAuth, periodRoutes);
 
 // Health check: επιβεβαιώνει σύνδεση με τη βάση και μετρά βασικά δεδομένα
 app.get('/api/health', async (req, res) => {

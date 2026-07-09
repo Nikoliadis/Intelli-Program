@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Περίοδος — Πρόγραμμα Βαρδιών</title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .panel {
+      background: #fff;
+      border-radius: 8px;
+      padding: 1.2rem 1.5rem;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      margin-bottom: 1.3rem;
+    }
+    .panel h2 { margin: 0 0 1rem; font-size: 1.05rem; color: #2f5496; }
+    .weeks-list { display: flex; flex-wrap: wrap; gap: .6rem; margin-top: .8rem; }
+    .week-chip {
+      background: #e3edfb;
+      color: #2f5496;
+      border-radius: 8px;
+      padding: .5rem .9rem;
+      font-size: .88rem;
+      font-weight: 600;
+    }
+    .week-chip small { display: block; font-weight: 400; color: #56607a; }
+    .active-period {
+      background: #e6f4e6;
+      border: 1px solid #b3dcb3;
+      color: #2e7d32;
+      border-radius: 8px;
+      padding: .7rem 1rem;
+      font-size: .92rem;
+      display: none;
+      margin-bottom: 1.3rem;
+    }
+    .radio-row { display: flex; gap: 2rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .radio-row label { display: flex; gap: .4rem; align-items: center; font-size: .92rem; }
+    .type-leave { background: #fdebd9; color: #9a5b1f; }
+    .type-repo { background: #e3edfb; color: #2f5496; }
+    .type-sick { background: #fdeaea; color: #b23030; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Πρόγραμμα Βαρδιών</div>
+    <nav>
+      <a href="/">Agents</a>
+      <a href="/period.html" class="active">Περίοδος</a>
+      <a class="disabled" title="Έρχεται στο ΒΗΜΑ 4-5">Πρόγραμμα</a>
+      <a class="disabled" title="Έρχεται αργότερα">Ρυθμίσεις</a>
+    </nav>
+    <div class="user">
+      <span id="userName"></span>
+      <button class="btn small" id="logoutBtn">Αποσύνδεση</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="active-period" id="activePeriod"></div>
+
+    <!-- Επιλογή περιόδου -->
+    <div class="panel">
+      <h2>1. Επιλογή περιόδου</h2>
+      <div class="radio-row">
+        <label><input type="radio" name="mode" value="month" checked> Ολόκληρος μήνας</label>
+        <label><input type="radio" name="mode" value="range"> Ελεύθερο διάστημα</label>
+      </div>
+      <div class="toolbar" style="margin-bottom:0">
+        <label class="field" id="monthField">
+          <span>Μήνας</span>
+          <input type="month" id="inMonth">
+        </label>
+        <label class="field" id="fromField" style="display:none">
+          <span>Από</span>
+          <input type="date" id="inFrom">
+        </label>
+        <label class="field" id="toField" style="display:none">
+          <span>Έως</span>
+          <input type="date" id="inTo">
+        </label>
+        <button class="btn" id="calcBtn" style="align-self:flex-end">Υπολογισμός εβδομάδων</button>
+        <button class="btn primary" id="confirmBtn" style="align-self:flex-end;display:none">Επιβεβαίωση περιόδου</button>
+      </div>
+      <div class="error-msg" id="periodErr"></div>
+      <div id="weeksPreview"></div>
+    </div>
+
+    <!-- Καταχώρηση αδειών / ρεπό -->
+    <div class="panel">
+      <h2>2. Καταχώρηση άδειας / αιτήματος ρεπό / ασθένειας</h2>
+      <div class="toolbar" style="margin-bottom:0;align-items:flex-end">
+        <label class="field">
+          <span>Agent</span>
+          <select id="toAgent" style="min-width:230px"></select>
+        </label>
+        <label class="field">
+          <span>Τύπος</span>
+          <select id="toType">
+            <option value="leave">Άδεια</option>
+            <option value="repo_request">Αίτημα ρεπό</option>
+            <option value="sick">Ασθένεια</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Από</span>
+          <input type="date" id="toFrom">
+        </label>
+        <label class="field">
+          <span>Έως (κενό = μία μέρα)</span>
+          <input type="date" id="toTo">
+        </label>
+        <label class="field" style="flex:1;min-width:160px">
+          <span>Σημειώσεις</span>
+          <input type="text" id="toNotes">
+        </label>
+        <button class="btn primary" id="addTimeOffBtn">Καταχώρηση</button>
+      </div>
+      <div class="error-msg" id="timeoffErr"></div>
+    </div>
+
+    <!-- Λίστα καταχωρήσεων -->
+    <div class="panel">
+      <h2>3. Καταχωρήσεις περιόδου <span class="muted" id="listRange"></span></h2>
+      <table class="data" id="timeoffTable">
+        <thead>
+          <tr>
+            <th>Agent</th>
+            <th>Τύπος</th>
+            <th>Από</th>
+            <th>Έως</th>
+            <th>Μέρες</th>
+            <th>Σημειώσεις</th>
+            <th style="width:110px">Ενέργειες</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p class="muted" id="emptyMsg" style="display:none">Καμία καταχώρηση.</p>
+    </div>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/js/period.js"></script>
+</body>
+</html>
