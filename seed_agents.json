@@ -1,0 +1,736 @@
+{
+  "_σημείωση": "Αρχικά δεδομένα agents για import στη βάση. Πηγή: Operatos_02062026ΝΙΚ.xlsx (ανανεωμένο, με φύλλο ιδιαιτεροτήτων). Ημέρες: 1=Δευτέρα ... 7=Κυριακή. Το πεδίο constraints περνάει στον πίνακα agent_constraints.",
+  "companies": [
+    "OPTIVA",
+    "INTELLI"
+  ],
+  "departments": [
+    "call",
+    "verification",
+    "supervisor"
+  ],
+  "skills": [
+    "EUROBANK",
+    "ΑΠΕΔ",
+    "ALPHA",
+    "INTERNATIONAL",
+    "ΛΟΙΠΑ",
+    "ΗΡΩΝ",
+    "ΠΕΙΡΑΙΩΣ"
+  ],
+  "shift_eligibility_19_03": [
+    {
+      "agent": "ΠΑΝΤΕΛΙΔΗΣ ΧΡΗΣΤΟΣ",
+      "max_per_week": 1,
+      "location": "office"
+    },
+    {
+      "agent": "ΡΙΖΟΥ ΒΙΚΥ",
+      "max_per_week": 3,
+      "location": "home"
+    },
+    {
+      "agent": "ΣΕΜΕΡΤΖΙΔΗΣ ΔΗΜΗΤΡΗΣ",
+      "max_per_week": 4,
+      "location": "office"
+    },
+    {
+      "agent": "ΜΠΟΥΓΙΟΥΚΟΣ ΓΙΩΡΓΟΣ",
+      "max_per_week": 2,
+      "location": "office"
+    },
+    {
+      "agent": "ΠΑΥΛΟΥ ΝΙΚΟΣ",
+      "max_per_week": 2,
+      "location": "office"
+    },
+    {
+      "agent": "ΝΤΟΥΦΑΣ ΘΟΔΩΡΗΣ",
+      "max_per_week": 4,
+      "location": "office"
+    },
+    {
+      "agent": "ΜΠΑΚΟΥΛΗΣ ΠΑΝΑΓΙΩΤΗΣ",
+      "max_per_week": 2,
+      "location": "home"
+    },
+    {
+      "agent": "ΑΓΓΕΛΗ ΝΙΚΟΛΕΤΤΑ",
+      "max_per_week": 3,
+      "location": "office",
+      "not_alone": true,
+      "σημείωση": "Πρέπει να υπάρχει κι άλλο άτομο στο γραφείο σε όλη τη διάρκεια 19:00-03:00"
+    }
+  ],
+  "agents": [
+    {
+      "full_name": "ΡΙΖΟΥ ΒΙΚΥ",
+      "company": "OPTIVA",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Εναλλαγή βάρδιας κάθε εβδομάδα (μία εβδομάδα πρωί, μία απόγευμα) λόγω 2ης εργασίας."
+    },
+    {
+      "full_name": "ΠΟΛΙΤΗ ΖΑΜΠΙΑ",
+      "company": "OPTIVA",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΖΥΓΟΠΟΥΛΟΣ ΓΙΑΝΝΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΚΡΑΣΑΔΑΚΗ ΣΟΦΙΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ΑΠΕΔ",
+        "ALPHA",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Μόνο πρωινή βάρδια. Εξυπηρετεί ΑΠΕΔ τις καθημερινές."
+    },
+    {
+      "full_name": "ΜΑΥΡΑΓΑΝΗ ΝΙΚΟΛΕΤΑ",
+      "company": "OPTIVA",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": true,
+      "constraints": "Δεν επιθυμεί νυχτερινή (23:00-07:00) — ΜΟΝΟ αν είναι ανάγκη (soft αποφυγή, τελευταία επιλογή)."
+    },
+    {
+      "full_name": "ΝΙΚΟΛΙΑΔΗΣ ΝΙΚΟΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": false,
+      "constraints": "Λόγω σχολής: κάθε Δευτέρα και Παρασκευή έχει ΡΕΠΟ ή εργάζεται ΤΗΛΕΡΓΑΣΙΑ 06:00-14:00. Τα ΣΚ μόνο πρωινή βάρδια (εργαστήρια σχολής). Soft: Παρασκευή 06:00-14:00 Πειραιώς μαζί με Νικολιάδη Αλίκη αν βγαίνει το πρόγραμμα, αλλιώς ρεπό ο ένας από τους δύο. Soft: κατά προτίμηση ίδια ώρα έναρξης με Νικολιάδη Αλίκη, γιατί έρχονται μαζί στη δουλειά."
+    },
+    {
+      "full_name": "ΝΟΜΙΚΟΥ ΝΟΤΑ",
+      "company": "OPTIVA",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": true,
+      "constraints": "Προτιμά απογευματινή βάρδια λόγω 2ης εργασίας. Κάνει κανονικά και νυχτερινή 23:00-07:00."
+    },
+    {
+      "full_name": "ΜΠΑΚΟΥΛΗΣ ΠΑΝΑΓΙΩΤΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA",
+        "INTERNATIONAL",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "2 ημέρες τηλεργασία + 3 ημέρες γραφείο την εβδομάδα. Όταν κάνει απογευματινή διά ζώσης: 15:30-23:30 και International."
+    },
+    {
+      "full_name": "ΠΑΝΤΕΛΙΔΗΣ ΧΡΗΣΤΟΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ΑΠΕΔ",
+        "ALPHA",
+        "INTERNATIONAL",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Εξυπηρετεί και ΑΠΕΔ και International."
+    },
+    {
+      "full_name": "ΚΟΚΙΟΠΟΥΛΟΥ ΔΑΝΑΗ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": false,
+      "fixed_shift": "16:00-24:00",
+      "fixed_days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "constraints": "Καθημερινές σταθερά 16:00-24:00 λόγω σχολής."
+    },
+    {
+      "full_name": "ΓΙΩΤΗ ΔΗΜΗΤΡΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": false,
+      "constraints": "Πρωινή ή απογευματινή. Απογευματινή το αργότερο έως 23:30. Ενημερώνει αν προκύψει θέμα με τη σχολή της."
+    },
+    {
+      "full_name": "ΔΕΛΗΚΩΣΤΟΠΟΥΛΟΥ ΠΑΝΑΓΙΩΤΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK",
+        "ΑΠΕΔ",
+        "ΗΡΩΝ"
+      ],
+      "can_night": false,
+      "constraints": "Απογευματινή από γραφείο ΜΟΝΟ ωράριο 14:00-22:00. Κυρίως ΗΡΩΝ — Eurobank ΜΟΝΟ σε απόλυτη ανάγκη (soft αποφυγή)."
+    },
+    {
+      "full_name": "ΑΝΔΡΙΚΟΠΟΥΛΟΥ ΜΑΡΙΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ΑΠΕΔ",
+        "ALPHA",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Εξυπηρετεί και ΑΠΕΔ."
+    },
+    {
+      "full_name": "ΧΑΛΑΣΤΑΝΗ ΟΛΓΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "EUROBANK",
+        "ΑΠΕΔ"
+      ],
+      "can_night": false,
+      "constraints": "Προτιμά πρωινή βάρδια (λόγω equites). Δεν κάνει αγγλικά calls."
+    },
+    {
+      "full_name": "ΑΓΓΕΛΗ ΝΙΚΟΛΕΤΤΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ΑΠΕΔ",
+        "ALPHA",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Εξυπηρετεί και ΑΠΕΔ. Στη βάρδια 19:00-03:00 δεν πρέπει να είναι μόνη στο γραφείο."
+    },
+    {
+      "full_name": "ΠΑΥΛΟΥ ΝΙΚΟΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA",
+        "INTERNATIONAL",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "ΜΟΝΟ απογευματινή βάρδια 15:30-23:30 ή 16:00-24:00 λόγω 2ης εργασίας (συν έως 2 φορές/εβδομάδα τη 19:00-03:00)."
+    },
+    {
+      "full_name": "ΤΣΙΚΡΙΚΗΣ ΖΗΣΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA",
+        "INTERNATIONAL",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Εξυπηρετεί και International."
+    },
+    {
+      "full_name": "ΜΠΟΥΚΗ ΧΡΙΣΤΙΝΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ΑΠΕΔ",
+        "ALPHA"
+      ],
+      "can_night": false,
+      "fixed_shift": "09:00-17:00",
+      "fixed_days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "constraints": "ΜΟΝΟ καθημερινές 09:00-17:00 και πάντα από γραφείο. Αν εργαστεί τηλεργασία μπορεί και άλλη βάρδια — κυρίως όμως 09:00-17:00."
+    },
+    {
+      "full_name": "ALIGIA LORENTSO",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA"
+      ],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΣΕΜΕΡΤΖΙΔΗΣ ΔΗΜΗΤΡΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA",
+        "INTERNATIONAL",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "International."
+    },
+    {
+      "full_name": "ΜΠΟΥΓΙΟΥΚΟΣ ΓΙΩΡΓΟΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ΑΠΕΔ",
+        "ALPHA",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Πρωινή και απογευματινή — προτιμά απογευματινή έως 23:30. Αν μπαίνει πρωί, από 09:00 και μετά. Εξυπηρετεί και ΑΠΕΔ."
+    },
+    {
+      "full_name": "ΑΔΡΑΚΤΑ ΕΥΓΕΝΙΑ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ΑΠΕΔ",
+        "ALPHA",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Απόγευμα έως 22:00. Πρωί από 09:00 κυρίως (μπορεί και 08:00). Εξυπηρετεί και ΑΠΕΔ."
+    },
+    {
+      "full_name": "ΝΤΟΥΦΑΣ ΘΟΔΩΡΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΝΙΚΟΛΙΑΔΗ ΑΛΙΚΗ",
+      "company": "INTELLI",
+      "departments": [
+        "call"
+      ],
+      "skills": [
+        "ALPHA",
+        "INTERNATIONAL",
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": false,
+      "constraints": "Λόγω σχολής: κάθε Τρίτη και Παρασκευή έχει ΡΕΠΟ ή εργάζεται ΤΗΛΕΡΓΑΣΙΑ 06:00-14:00. Τις υπόλοιπες μέρες ΜΟΝΟ πρωινή βάρδια με έναρξη 07:30 ή 08:00. Soft: κατά προτίμηση ίδια ώρα έναρξης με τον Νικολιάδη Νίκο, γιατί έρχονται μαζί στη δουλειά."
+    },
+    {
+      "full_name": "ΠΑΠΟΡΙΔΗΣ ΝΙΚΟΛΑΟΣ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": null,
+      "constraints": "Σε εκπαίδευση για Eurobank call."
+    },
+    {
+      "full_name": "ΑΓΓΕΛΟΥΔΗ ΜΑΡΙΑ",
+      "company": "OPTIVA",
+      "departments": [
+        "supervisor"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": false,
+      "fixed_days_off": [
+        1,
+        2
+      ],
+      "weekend_shift": "16:00-24:00",
+      "constraints": "Σταθερά ρεπό Δευτέρα + Τρίτη. Σαββατοκύριακα δουλεύει 16:00-24:00."
+    },
+    {
+      "full_name": "ΠΑΠΑΣΑΡΑΝΤΟΥ ΜΑΤΙΝΑ",
+      "company": "OPTIVA",
+      "departments": [
+        "supervisor"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": false,
+      "constraints": "Προτιμάει συνεχόμενα ρεπό (soft προτίμηση με αυξημένη προτεραιότητα)."
+    },
+    {
+      "full_name": "ΨΑΡΡΑΣ ΕΥΘΥΜΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "supervisor"
+      ],
+      "skills": [
+        "EUROBANK",
+        "ΑΠΕΔ"
+      ],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΑΜΗΡΑ ΞΑΝΘΗ",
+      "company": "INTELLI",
+      "departments": [
+        "supervisor"
+      ],
+      "skills": [
+        "ALPHA"
+      ],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΔΗΜΗΤΡΙΟΥ ΕΛΕΝΗ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "EUROBANK"
+      ],
+      "can_night": false,
+      "fixed_shift": "08:00-16:00",
+      "fixed_days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "constraints": "Σταθερό ωράριο καθημερινές 08:00-16:00."
+    },
+    {
+      "full_name": "ΗΛΙΟΠΟΥΛΟΣ ΣΩΤΗΡΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "EUROBANK",
+        "ΗΡΩΝ"
+      ],
+      "can_night": false,
+      "constraints": "ΗΡΩΝ Δευτέρα έως Παρασκευή."
+    },
+    {
+      "full_name": "ΦΥΣΕΚΗ ΔΗΜΗΤΡΑ",
+      "company": "OPTIVA",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "EUROBANK",
+        "ΠΕΙΡΑΙΩΣ"
+      ],
+      "can_night": false,
+      "constraints": "Πειραιώς."
+    },
+    {
+      "full_name": "ΛΑΜΠΡΙΑΝΙΔΟΥ ΕΙΡΗΝΗ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΠΑΝΑΓΟΥ ΔΕΣΠΟΙΝΑ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΗΡΩΝ"
+      ],
+      "can_night": false,
+      "constraints": "Δευτέρα έως Παρασκευή ΗΡΩΝ."
+    },
+    {
+      "full_name": "ΚΑΡΑΓΙΑΝΝΙΔΟΥ ΚΑΤΕΡΙΝΑ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΚΟΥΛΟΓΙΑΝΝΗΣ ΚΥΡΙΑΚΟΣ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [],
+      "can_night": false,
+      "constraints": "Τις καθημερινές: σπαστό ωράριο 09:00-14:00 + 21:00-24:00."
+    },
+    {
+      "full_name": "ΚΟΨΙΑ ΒΑΣΙΑ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΗΡΩΝ"
+      ],
+      "can_night": false,
+      "constraints": "Η βάρδιά της ξεκινάει από τις 09:00 και μετά. ΗΡΩΝ Δευτέρα έως Παρασκευή."
+    },
+    {
+      "full_name": "ΝΙΚΟΛΑΪΔΟΥ ΕΥΗ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΠΑΝΟΥ ΑΠΟΣΤΟΛΙΑ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΠΕΙΡΑΙΩΣ"
+      ],
+      "can_night": false,
+      "constraints": "Πειραιώς. Εξυπηρετεί και βραδινά έως τη 01:00-02:00 (όχι πλήρη νυχτερινή)."
+    },
+    {
+      "full_name": "ΟΙΚΟΝΟΜΟΠΟΥΛΟΥ ΜΑΡΙΑ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [],
+      "can_night": false,
+      "work_location": "home",
+      "constraints": "Εξ αποστάσεως (τηλεργασία), ΜΟΝΟ πρωινά."
+    },
+    {
+      "full_name": "ΠΟΥΛΑΚΟΣ ΓΙΑΝΝΗΣ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΗΡΩΝ"
+      ],
+      "can_night": false,
+      "fixed_shift": "10:00-18:00",
+      "fixed_days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "constraints": "ΜΟΝΟ καθημερινές, σταθερό ωράριο 10:00-18:00."
+    },
+    {
+      "full_name": "ΠΡΙΜΑΛΗ ΕΛΕΝΗ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΗΡΩΝ"
+      ],
+      "can_night": false,
+      "fixed_shift": "09:00-17:00",
+      "fixed_days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "constraints": "ΜΟΝΟ καθημερινές, σταθερό ωράριο 09:00-17:00."
+    },
+    {
+      "full_name": "ΣΤΑΘΟΠΟΥΛΟΥ ΑΝΘΗ",
+      "company": "OPTIVA",
+      "departments": [
+        "verification"
+      ],
+      "skills": [],
+      "can_night": false,
+      "fixed_shift": "16:00-24:00",
+      "work_location": "home",
+      "constraints": "Εξ αποστάσεως (τηλεργασία), ωράριο 16:00-24:00."
+    },
+    {
+      "full_name": "ΠΙΠΕΡΙΔΗ ΕΥΑΓΓΕΛΙΑ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "EUROBANK",
+        "ΗΡΩΝ"
+      ],
+      "can_night": false,
+      "fixed_shift": "09:00-17:00",
+      "fixed_days": [
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "constraints": "ΜΟΝΟ καθημερινές, σταθερό ωράριο 09:00-17:00."
+    },
+    {
+      "full_name": "ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [],
+      "can_night": true,
+      "fixed_days_off": [
+        3,
+        4
+      ],
+      "constraints": "Σταθερά ρεπό Τετάρτη + Πέμπτη. Τις υπόλοιπες μέρες απογευματινή βάρδια."
+    },
+    {
+      "full_name": "ΠΑΠΑΣΑΡΑΝΤΟΥ ΚΩΝΣΤΑΝΤΙΝΑ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "EUROBANK",
+        "ΠΕΙΡΑΙΩΣ"
+      ],
+      "can_night": false,
+      "work_location": "home",
+      "constraints": "Εξ αποστάσεως (τηλεργασία), ΜΟΝΟ πρωινά."
+    },
+    {
+      "full_name": "ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [],
+      "can_night": null,
+      "constraints": null
+    },
+    {
+      "full_name": "ΠΡΑΠΑ ΠΑΡΑΣΚΕΥΗ",
+      "company": "INTELLI",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΠΕΙΡΑΙΩΣ"
+      ],
+      "can_night": false,
+      "constraints": "Κυρίως Πειραιώς. Alpha call μετά τις 14:00. Απόγευμα (δεν προτιμάται) το πολύ μέχρι 21:00."
+    },
+    {
+      "full_name": "WALLA ELGHANDOUR",
+      "company": "OPTIVA",
+      "departments": [
+        "verification"
+      ],
+      "skills": [
+        "ΛΟΙΠΑ"
+      ],
+      "can_night": null,
+      "constraints": null
+    }
+  ]
+}

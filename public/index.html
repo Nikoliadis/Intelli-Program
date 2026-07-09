@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Πρόγραμμα Βαρδιών</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; background: #f4f6f9; margin: 0;
+           display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .card { background: #fff; border-radius: 8px; padding: 2rem 3rem;
+            box-shadow: 0 2px 8px rgba(0,0,0,.1); text-align: center; }
+    h1 { color: #2f5496; margin-top: 0; }
+    #status { font-size: .95rem; color: #555; }
+    .ok { color: #2e7d32; font-weight: 600; }
+    .fail { color: #c62828; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Πρόγραμμα Βαρδιών</h1>
+    <p>ΒΗΜΑ 1 — Θεμέλια εφαρμογής</p>
+    <div id="status">Έλεγχος σύνδεσης με τη βάση…</div>
+  </div>
+  <script>
+    // Απλός έλεγχος υγείας για το ΒΗΜΑ 1 — οι οθόνες έρχονται στα επόμενα βήματα
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((d) => {
+        const el = document.getElementById('status');
+        if (d.ok) {
+          el.innerHTML = '<span class="ok">✓ Σύνδεση με βάση OK</span><br>' +
+            'Agents: ' + d.agents + ' · Απαιτήσεις κάλυψης: ' + d.shift_requirements +
+            ' · Λίστα 19:00–03:00: ' + d.shift_eligibility +
+            ' · Constraints: ' + d.agent_constraints;
+        } else {
+          el.innerHTML = '<span class="fail">✗ Σφάλμα βάσης:</span> ' + d.error;
+        }
+      })
+      .catch((e) => {
+        document.getElementById('status').innerHTML =
+          '<span class="fail">✗ Δεν απαντά ο server:</span> ' + e.message;
+      });
+  </script>
+</body>
+</html>
