@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Σύνδεση — Πρόγραμμα Βαρδιών</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="login-wrap">
+    <form class="login-card" id="loginForm">
+      <h1>Πρόγραμμα Βαρδιών</h1>
+      <div style="display:flex;flex-direction:column;gap:.9rem">
+        <label class="field">
+          <span>Όνομα χρήστη</span>
+          <input type="text" id="username" autocomplete="username" autofocus>
+        </label>
+        <label class="field">
+          <span>Κωδικός</span>
+          <input type="password" id="password" autocomplete="current-password">
+        </label>
+        <button class="btn primary" type="submit">Σύνδεση</button>
+        <div class="error-msg" id="err"></div>
+      </div>
+    </form>
+  </div>
+  <script>
+    document.getElementById('loginForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const err = document.getElementById('err');
+      err.textContent = '';
+      try {
+        const r = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            username: document.getElementById('username').value.trim(),
+            password: document.getElementById('password').value
+          })
+        });
+        const d = await r.json();
+        if (d.ok) {
+          location.href = '/';
+        } else {
+          err.textContent = d.error || 'Σφάλμα σύνδεσης';
+        }
+      } catch (ex) {
+        err.textContent = 'Δεν απαντά ο server';
+      }
+    });
+  </script>
+</body>
+</html>

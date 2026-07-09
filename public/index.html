@@ -3,43 +3,164 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Πρόγραμμα Βαρδιών</title>
-  <style>
-    body { font-family: 'Segoe UI', sans-serif; background: #f4f6f9; margin: 0;
-           display: flex; align-items: center; justify-content: center; min-height: 100vh; }
-    .card { background: #fff; border-radius: 8px; padding: 2rem 3rem;
-            box-shadow: 0 2px 8px rgba(0,0,0,.1); text-align: center; }
-    h1 { color: #2f5496; margin-top: 0; }
-    #status { font-size: .95rem; color: #555; }
-    .ok { color: #2e7d32; font-weight: 600; }
-    .fail { color: #c62828; font-weight: 600; }
-  </style>
+  <title>Agents — Πρόγραμμα Βαρδιών</title>
+  <link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
-  <div class="card">
-    <h1>Πρόγραμμα Βαρδιών</h1>
-    <p>ΒΗΜΑ 1 — Θεμέλια εφαρμογής</p>
-    <div id="status">Έλεγχος σύνδεσης με τη βάση…</div>
+  <header class="topbar">
+    <div class="brand">Πρόγραμμα Βαρδιών</div>
+    <nav>
+      <a href="/" class="active">Agents</a>
+      <a class="disabled" title="Έρχεται στο ΒΗΜΑ 3">Περίοδος</a>
+      <a class="disabled" title="Έρχεται στο ΒΗΜΑ 4-5">Πρόγραμμα</a>
+      <a class="disabled" title="Έρχεται αργότερα">Ρυθμίσεις</a>
+    </nav>
+    <div class="user">
+      <span id="userName"></span>
+      <button class="btn small" id="logoutBtn">Αποσύνδεση</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <input type="text" id="fltSearch" placeholder="Αναζήτηση ονόματος…" style="width:230px">
+      <select id="fltDept">
+        <option value="">Όλα τα τμήματα</option>
+        <option value="call">Call</option>
+        <option value="verification">Verification</option>
+        <option value="supervisor">Supervisor</option>
+      </select>
+      <select id="fltCompany">
+        <option value="">Όλες οι εταιρίες</option>
+        <option value="OPTIVA">OPTIVA</option>
+        <option value="INTELLI">INTELLI</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:.35rem;font-size:.88rem">
+        <input type="checkbox" id="fltInactive"> Εμφάνιση ανενεργών
+      </label>
+      <div class="spacer"></div>
+      <span class="muted" id="countInfo"></span>
+      <button class="btn primary" id="addBtn">+ Νέος agent</button>
+    </div>
+
+    <table class="data" id="agentsTable">
+      <thead>
+        <tr>
+          <th>Ονοματεπώνυμο</th>
+          <th>Εταιρία</th>
+          <th>Τμήματα</th>
+          <th>Δεξιότητες</th>
+          <th>Βράδυ</th>
+          <th>Σταθερό ωράριο</th>
+          <th>Ιδιαιτερότητες</th>
+          <th style="width:150px">Ενέργειες</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <!-- Modal προσθήκης/επεξεργασίας agent -->
+  <div class="modal-backdrop" id="modalBackdrop" style="display:none">
+    <div class="modal">
+      <h2 id="modalTitle">Νέος agent</h2>
+      <div class="form-grid">
+        <label class="field full">
+          <span>Ονοματεπώνυμο *</span>
+          <input type="text" id="fFullName">
+        </label>
+        <label class="field">
+          <span>Εταιρία</span>
+          <select id="fCompany">
+            <option value="">—</option>
+            <option value="OPTIVA">OPTIVA</option>
+            <option value="INTELLI">INTELLI</option>
+          </select>
+        </label>
+        <label class="field">
+          <span>Κάνει νυχτερινές;</span>
+          <select id="fCanNight">
+            <option value="">Άγνωστο</option>
+            <option value="1">Ναι</option>
+            <option value="0">Όχι</option>
+          </select>
+        </label>
+        <fieldset class="full">
+          <legend>Τμήματα *</legend>
+          <div class="check-row" id="fDepartments">
+            <label><input type="checkbox" value="call"> Call</label>
+            <label><input type="checkbox" value="verification"> Verification</label>
+            <label><input type="checkbox" value="supervisor"> Supervisor</label>
+          </div>
+        </fieldset>
+        <fieldset class="full">
+          <legend>Δεξιότητες</legend>
+          <div class="check-row" id="fSkills"></div>
+        </fieldset>
+        <fieldset class="full">
+          <legend>Σταθερό ωράριο (Κ5 — κλειδωμένο, ο generator το τηρεί πάντα)</legend>
+          <div style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:flex-end">
+            <label class="field">
+              <span>Έναρξη</span>
+              <input type="time" id="fFixedStart">
+            </label>
+            <label class="field">
+              <span>Λήξη</span>
+              <input type="time" id="fFixedEnd">
+            </label>
+            <div class="field">
+              <span style="font-size:.85rem;font-weight:600;color:#56607a">Ημέρες σταθερού ωραρίου</span>
+              <div class="check-row" id="fFixedDays"></div>
+            </div>
+          </div>
+        </fieldset>
+        <fieldset class="full">
+          <legend>Σταθερά ρεπό &amp; λοιπά</legend>
+          <div style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:flex-end">
+            <div class="field">
+              <span style="font-size:.85rem;font-weight:600;color:#56607a">Ημέρες σταθερού ρεπό</span>
+              <div class="check-row" id="fFixedDaysOff"></div>
+            </div>
+            <label class="field">
+              <span>Βάρδια ΣΚ (π.χ. 16:00-24:00)</span>
+              <input type="text" id="fWeekendShift" placeholder="HH:MM-HH:MM" style="width:140px">
+            </label>
+            <label class="field">
+              <span>Τοποθεσία εργασίας</span>
+              <select id="fWorkLocation">
+                <option value="">Γραφείο (προεπιλογή)</option>
+                <option value="home">Τηλεργασία (σπίτι)</option>
+              </select>
+            </label>
+            <label class="field">
+              <span>Νέος agent;</span>
+              <select id="fIsNew">
+                <option value="0">Όχι</option>
+                <option value="1">Ναι</option>
+              </select>
+            </label>
+          </div>
+        </fieldset>
+        <fieldset class="full">
+          <legend>Ιδιαιτερότητες / κανόνες (agent_constraints)</legend>
+          <div id="fConstraints"></div>
+          <button class="btn small" type="button" id="addConstraintBtn">+ Προσθήκη κανόνα</button>
+        </fieldset>
+        <label class="field full">
+          <span>Σημειώσεις</span>
+          <textarea id="fNotes" rows="2"></textarea>
+        </label>
+      </div>
+      <div class="error-msg" id="modalErr"></div>
+      <div class="modal-actions">
+        <button class="btn" id="cancelBtn">Άκυρο</button>
+        <button class="btn primary" id="saveBtn">Αποθήκευση</button>
+      </div>
+    </div>
   </div>
-  <script>
-    // Απλός έλεγχος υγείας για το ΒΗΜΑ 1 — οι οθόνες έρχονται στα επόμενα βήματα
-    fetch('/api/health')
-      .then((r) => r.json())
-      .then((d) => {
-        const el = document.getElementById('status');
-        if (d.ok) {
-          el.innerHTML = '<span class="ok">✓ Σύνδεση με βάση OK</span><br>' +
-            'Agents: ' + d.agents + ' · Απαιτήσεις κάλυψης: ' + d.shift_requirements +
-            ' · Λίστα 19:00–03:00: ' + d.shift_eligibility +
-            ' · Constraints: ' + d.agent_constraints;
-        } else {
-          el.innerHTML = '<span class="fail">✗ Σφάλμα βάσης:</span> ' + d.error;
-        }
-      })
-      .catch((e) => {
-        document.getElementById('status').innerHTML =
-          '<span class="fail">✗ Δεν απαντά ο server:</span> ' + e.message;
-      });
-  </script>
+
+  <div id="toast"></div>
+
+  <script src="/js/agents.js"></script>
 </body>
 </html>

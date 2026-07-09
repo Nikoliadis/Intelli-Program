@@ -1,10 +1,15 @@
 // Κεντρικός Express server.
-// ΒΗΜΑ 1: static frontend + health check βάσης. Τα routes (login, agents,
-// περίοδος, generator, export) προστίθενται στα επόμενα βήματα στο src/routes/.
+// ΒΗΜΑ 2: login (session + bcrypt) και API agents. Οι επόμενες οθόνες
+// (περίοδος, generator, export) προστίθενται στα επόμενα βήματα.
 const express = require('express');
 const session = require('express-session');
 const path = require('path');
 const pool = require('./db/pool');
+const { requireAuth } = require('./middleware/auth');
+
+const authRoutes = require('./routes/auth');
+const agentsRoutes = require('./routes/agents');
+const metaRoutes = require('./routes/meta');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -21,6 +26,13 @@ app.use(
 
 // Static frontend
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+// Routes χωρίς auth: login/logout/me
+app.use('/api', authRoutes);
+
+// Routes με auth
+app.use('/api/agents', requireAuth, agentsRoutes);
+app.use('/api', requireAuth, metaRoutes);
 
 // Health check: επιβεβαιώνει σύνδεση με τη βάση και μετρά βασικά δεδομένα
 app.get('/api/health', async (req, res) => {
