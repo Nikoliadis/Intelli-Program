@@ -27,7 +27,10 @@ async function generatePeriod(weeks) {
       weekStart: res.weekStart,
       dates: res.dates,
       assignments: res.assignments,
-      report: res.report
+      report: res.report,
+      // Κατάσταση στο ΤΕΛΟΣ της εβδομάδας — αποθηκεύεται μαζί της ώστε οι
+      // επόμενες παραγωγές να ελέγχουν σωστά Κ8/Κ10 στο ξεκίνημά τους
+      state: res.nextState
     });
   }
   return { weeks: out, finalState: state };

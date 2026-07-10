@@ -249,14 +249,22 @@ function check(name, cond, detail) {
 
   // ---------- 5. Κ7/Κ9: νυχτερινές & 19:00-03:00 ----------
   {
-    const nightOk = new Set([idOf['ΝΟΜΙΚΟΥ ΝΟΤΑ'], idOf['ΜΑΥΡΑΓΑΝΗ ΝΙΚΟΛΕΤΑ']]);
+    // Δυναμικά από τη βάση: νυχτερινή επιτρέπεται ΜΟΝΟ με can_night=1 + skill
+    // EUROBANK (ό,τι ισχύει τη στιγμή του τεστ — επεξεργάσιμο από οθόνη Agents)
+    const [nightRows] = await pool.query(
+      `SELECT DISTINCT a.id FROM agents a
+       JOIN agent_skills ask ON ask.agent_id = a.id
+       JOIN skills s ON s.id = ask.skill_id
+       WHERE a.active = 1 AND a.can_night = 1 AND s.name = 'EUROBANK'`
+    );
+    const nightOk = new Set(nightRows.map((r) => r.id));
     let bad = null;
     for (const a of workRows) {
       if ((a.start === '23:00' || a.start === '23:30') && toMin(a.end) < toMin(a.start)) {
         if (!nightOk.has(a.agentId)) { bad = `${nameOf[a.agentId]} πήρε νυχτερινή ${a.date}`; break; }
       }
     }
-    check('Κ7: νυχτερινές ΜΟΝΟ σε Νομικού/Μαυραγάνη (απόφαση 09/07/2026)', !bad, bad);
+    check(`Κ7: νυχτερινές ΜΟΝΟ από agents με can_night + EUROBANK (${nightRows.length} επιλέξιμοι)`, !bad, bad);
 
     let bad19 = null;
     const usage = new Map(); // week|agent → count

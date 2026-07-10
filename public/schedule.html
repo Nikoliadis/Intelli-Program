@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Πρόγραμμα — Πρόγραμμα Βαρδιών</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    main { max-width: none; }
+    .sched-toolbar {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      flex-wrap: wrap;
+      margin-bottom: .8rem;
+    }
+    .week-tabs { display: flex; gap: .3rem; align-items: center; flex-wrap: wrap; }
+    .week-tab {
+      padding: .4rem .7rem;
+      border-radius: 6px;
+      background: #e4e9f2;
+      cursor: pointer;
+      font-size: .85rem;
+      border: 2px solid transparent;
+      user-select: none;
+    }
+    .week-tab.active { background: #2f5496; color: #fff; font-weight: 600; }
+    .week-tab .dirty { color: #e6a817; font-weight: 700; }
+    .week-tab.active .dirty { color: #ffd968; }
+
+    /* ---- Grid ---- */
+    .grid-wrap {
+      overflow: auto;
+      background: #fff;
+      border-radius: 8px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07);
+      max-height: 72vh;
+      position: relative;
+    }
+    .sched-grid { display: grid; font-size: .72rem; min-width: max-content; }
+    .hour-cell {
+      position: sticky;
+      left: 0;
+      background: #f0f3f8;
+      border-bottom: 1px solid #e2e7f0;
+      border-right: 2px solid #c6cede;
+      padding: 2px 6px;
+      color: #56607a;
+      font-weight: 600;
+      white-space: nowrap;
+      z-index: 2;
+    }
+    .day-head {
+      position: sticky;
+      top: 0;
+      background: #2f5496;
+      color: #fff;
+      font-weight: 700;
+      font-size: .8rem;
+      padding: 4px 8px;
+      border-left: 2px solid #fff;
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      z-index: 3;
+    }
+    .day-head .unc-badge {
+      background: #e05252;
+      border-radius: 9px;
+      padding: 0 .45rem;
+      font-size: .72rem;
+    }
+    .day-head button {
+      margin-left: auto;
+      background: rgba(255,255,255,.25);
+      border: none;
+      color: #fff;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: .8rem;
+      padding: .1rem .45rem;
+    }
+    .corner-cell {
+      position: sticky;
+      top: 0;
+      left: 0;
+      background: #2f5496;
+      z-index: 4;
+    }
+    .grid-bg {
+      border-bottom: 1px solid #eef1f6;
+      border-left: 1px dotted #eef1f6;
+    }
+    .day-start { border-left: 2px solid #c6cede; }
+    .blk {
+      border-radius: 4px;
+      margin: 1px;
+      padding: 2px 4px;
+      overflow: hidden;
+      cursor: pointer;
+      border: 1px solid rgba(0,0,0,.18);
+      line-height: 1.15;
+      z-index: 1;
+    }
+    .blk:hover { outline: 2px solid #2f5496; z-index: 2; }
+    .blk .nm { font-weight: 700; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    .blk .tm { white-space: nowrap; }
+    .blk .lb { font-size: .62rem; opacity: .8; white-space: nowrap; }
+    .blk.manual { border: 2px dashed #444; }
+    .blk.nocolor { background: repeating-linear-gradient(45deg, #fff, #fff 6px, #f0f0f0 6px, #f0f0f0 12px); }
+
+    /* ---- Panels ---- */
+    .panels { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem; align-items: start; }
+    .panel2 { background: #fff; border-radius: 8px; padding: .8rem 1rem; box-shadow: 0 1px 4px rgba(0,0,0,.07); }
+    .panel2 h3 { margin: 0 0 .5rem; font-size: .9rem; }
+    .panel2 ul { margin: 0; padding-left: 1.1rem; font-size: .82rem; max-height: 220px; overflow-y: auto; }
+    .panel2.warn h3 { color: #9a6c00; }
+    .panel2.warn { border-left: 4px solid #e6a817; }
+    .panel2.unc h3 { color: #b23030; }
+    .panel2.unc { border-left: 4px solid #e05252; }
+    .panel2.offs { border-left: 4px solid #8a93a8; }
+    .off-chip {
+      display: inline-block;
+      border-radius: 9px;
+      padding: .05rem .5rem;
+      font-size: .72rem;
+      margin: 0 .2rem .2rem 0;
+      background: #eef1f6;
+    }
+    .off-chip.leave { background: #fdebd9; color: #9a5b1f; }
+    .off-chip.sick { background: #fdeaea; color: #b23030; }
+    .off-chip.repo_request { background: #e3edfb; color: #2f5496; }
+    .swatches { display: flex; flex-wrap: wrap; gap: .4rem; }
+    .swatch {
+      width: 34px; height: 26px;
+      border-radius: 5px;
+      border: 2px solid #c6cede;
+      cursor: pointer;
+    }
+    .swatch.sel { border: 3px solid #2f5496; }
+    .ok-msg { color: #2e7d32; font-size: .85rem; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Πρόγραμμα Βαρδιών</div>
+    <nav>
+      <a href="/">Agents</a>
+      <a href="/period.html">Περίοδος</a>
+      <a href="/schedule.html" class="active">Πρόγραμμα</a>
+      <a class="disabled" title="Έρχεται αργότερα">Ρυθμίσεις</a>
+    </nav>
+    <div class="user">
+      <span id="userName"></span>
+      <button class="btn small" id="logoutBtn">Αποσύνδεση</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="noPeriod" style="display:none" class="panel2">
+      Δεν έχει οριστεί περίοδος. Πήγαινε στην οθόνη <a href="/period.html">Περίοδος</a>, υπολόγισε τις εβδομάδες και πάτα «Επιβεβαίωση περιόδου».
+    </div>
+
+    <div id="schedArea" style="display:none">
+      <div class="sched-toolbar">
+        <button class="btn" id="prevWeekBtn">‹</button>
+        <div class="week-tabs" id="weekTabs"></div>
+        <button class="btn" id="nextWeekBtn">›</button>
+        <div class="spacer" style="flex:1"></div>
+        <span class="muted" id="statusInfo"></span>
+        <button class="btn primary" id="generateBtn">Δημιουργία Προγράμματος</button>
+        <button class="btn" id="saveWeekBtn">Αποθήκευση εβδομάδας</button>
+        <button class="btn" id="saveAllBtn">Αποθήκευση όλων</button>
+      </div>
+
+      <div class="grid-wrap"><div class="sched-grid" id="grid"></div></div>
+
+      <div class="panels">
+        <div class="panel2 unc">
+          <h3>Ακάλυπτες απαιτήσεις <span id="uncCount"></span></h3>
+          <ul id="uncList"></ul>
+          <div class="ok-msg" id="uncOk" style="display:none">Όλες οι απαιτήσεις καλύπτονται ✓</div>
+        </div>
+        <div class="panel2 warn">
+          <h3>Προειδοποιήσεις κανόνων <span id="warnCount"></span></h3>
+          <ul id="warnList"></ul>
+          <div class="ok-msg" id="warnOk" style="display:none">Καμία παραβίαση ✓</div>
+        </div>
+        <div class="panel2 offs">
+          <h3>Ρεπό / Άδειες εβδομάδας</h3>
+          <div id="offsArea" style="font-size:.82rem"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal επεξεργασίας ανάθεσης -->
+  <div class="modal-backdrop" id="editBackdrop" style="display:none">
+    <div class="modal" style="width:460px">
+      <h2 id="editTitle">Ανάθεση</h2>
+      <div style="display:flex;flex-direction:column;gap:.8rem">
+        <label class="field">
+          <span>Agent</span>
+          <select id="eAgent"></select>
+        </label>
+        <div style="display:flex;gap:1rem">
+          <label class="field">
+            <span>Ημερομηνία</span>
+            <input type="text" id="eDate" readonly style="width:120px;background:#f0f3f8">
+          </label>
+          <label class="field">
+            <span>Έναρξη</span>
+            <input type="text" id="eStart" placeholder="HH:MM" style="width:80px">
+          </label>
+          <label class="field">
+            <span>Λήξη</span>
+            <input type="text" id="eEnd" placeholder="HH:MM" style="width:80px">
+          </label>
+        </div>
+        <label class="field">
+          <span>Ετικέτα</span>
+          <select id="eLabel">
+            <option value="">—</option>
+            <option value="ΤΗΛΕΡΓΑΣΙΑ">ΤΗΛΕΡΓΑΣΙΑ</option>
+            <option value="INTERNATIONAL">INTERNATIONAL</option>
+            <option value="ΝΥΧΤΕΡΙΝΗ">ΝΥΧΤΕΡΙΝΗ</option>
+            <option value="ΣΠΑΣΤΟ">ΣΠΑΣΤΟ</option>
+          </select>
+        </label>
+        <div class="field">
+          <span style="font-size:.85rem;font-weight:600;color:#56607a">Χρώμα (παλέτα ρόλων — δεν δεσμεύεται από τον agent)</span>
+          <div class="swatches" id="eSwatches"></div>
+        </div>
+      </div>
+      <div class="error-msg" id="editErr"></div>
+      <div class="modal-actions">
+        <button class="btn danger" id="deleteBtn" style="margin-right:auto">Διαγραφή</button>
+        <button class="btn" id="editCancelBtn">Άκυρο</button>
+        <button class="btn primary" id="editSaveBtn">Εφαρμογή</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <script src="/js/schedule.js"></script>
+</body>
+</html>

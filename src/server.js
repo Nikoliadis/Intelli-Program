@@ -16,7 +16,8 @@ const scheduleRoutes = require('./routes/schedule');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(express.json());
+// Μεγαλύτερο όριο body: οι validate/save κλήσεις στέλνουν ολόκληρες εβδομάδες αναθέσεων
+app.use(express.json({ limit: '5mb' }));
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'programa-vardion-dev-secret',

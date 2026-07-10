@@ -139,8 +139,10 @@ function offsKeepStreakOk(offs, initialStreak) {
 }
 
 // ---------- Έλεγχος κανόνων agent για συγκεκριμένη βάρδια ----------
+// Ανεξάρτητο από την εβδομάδα — χρησιμοποιείται και από τον validator
+// των χειροκίνητων αλλαγών (ΒΗΜΑ 5).
 // opts: { override1903: bool (Κ9 υπερισχύει ατομικών ωραρίων), telework: bool }
-function shiftAllowedByRules(w, agent, d, start, end, opts = {}) {
+function shiftAllowedByRules(agent, d, start, end, opts = {}) {
   const dow = d + 1; // 1=Δευτέρα ... 7=Κυριακή
   const isWknd = dow >= 6;
   const s = toMin(start);
@@ -208,7 +210,7 @@ function shiftAllowedByRules(w, agent, d, start, end, opts = {}) {
 function canPlace(w, plan, d, start, end, opts = {}) {
   if (plan.days[d]) return false; // Κ2: 1 βάρδια/μέρα, όχι πάνω σε ρεπό/άδεια
   if (!opts.ignoreTarget && assignedCount(plan) >= workTarget(plan)) return false; // Κ2: 5 εργάσιμες
-  if (!shiftAllowedByRules(w, plan.agent, d, start, end, opts)) return false;
+  if (!shiftAllowedByRules(plan.agent, d, start, end, opts)) return false;
   if (!k8ok(w, plan, d, start, end)) return false;
   if (!k10ok(w, plan, d)) return false;
   return true;
@@ -925,4 +927,4 @@ function generateWeek(ctx, weekStart, state) {
   };
 }
 
-module.exports = { generateWeek };
+module.exports = { generateWeek, shiftAllowedByRules, rule, REST_MIN, REST_MIN_SPLIT, MAX_STREAK };
