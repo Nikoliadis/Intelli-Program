@@ -5,7 +5,7 @@
 //   uncovered: ακάλυπτες απαιτήσεις (κόκκινη ένδειξη στο UI)
 // Οι έλεγχοι Κ8/Κ10 κοιτούν ΚΑΙ προς τις γειτονικές εβδομάδες.
 const { loadContext } = require('./context');
-const { shiftAllowedByRules, rule, REST_MIN, REST_MIN_SPLIT, MAX_STREAK } = require('./engine');
+const { shiftAllowedByRules, rule, deptMatch, REST_MIN, REST_MIN_SPLIT, MAX_STREAK } = require('./engine');
 const { shiftAbs, toMin, dayNum } = require('./time');
 const { addDays, dayOfWeek } = require('../utils/dates');
 
@@ -230,7 +230,7 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
         const a = dayRows[i];
         const ag = agentById.get(a.agentId);
         if (!ag) continue;
-        if (def.department && !ag.departments.includes(def.department)) continue;
+        if (!deptMatch(ag, def.department)) continue;
         if (def.skill && !ag.skills.has(def.skill)) continue;
 
         let match = a.start === def.start && a.end === def.end;

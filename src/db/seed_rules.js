@@ -60,7 +60,8 @@ const RULES = {
   ],
   'ΔΕΛΗΚΩΣΤΟΠΟΥΛΟΥ ΠΑΝΑΓΙΩΤΑ': [
     { d: 'Απογευματινή από γραφείο ΜΟΝΟ ωράριο 14:00-22:00.', r: { type: 'afternoon_office_shift', shift: ['14:00', '22:00'] } },
-    { d: 'Κυρίως ΗΡΩΝ — Eurobank ΜΟΝΟ σε απόλυτη ανάγκη.', r: { type: 'skill_last_resort', skill: 'EUROBANK' } }
+    { d: 'Κυρίως ΗΡΩΝ — Eurobank ΜΟΝΟ σε απόλυτη ανάγκη (10/07/2026: μόνο αν δεν βγαίνει αλλιώς).', r: { type: 'skill_last_resort', skill: 'EUROBANK' } },
+    { d: 'Κυρίως ΗΡΩΝ τις καθημερινές (10/07/2026).', r: { type: 'heron_weekdays' } }
   ],
   'ΧΑΛΑΣΤΑΝΗ ΟΛΓΑ': [
     { d: 'Προτιμά πρωινή βάρδια (λόγω equites). Δεν κάνει αγγλικά calls.', r: { type: 'prefer_morning' } }

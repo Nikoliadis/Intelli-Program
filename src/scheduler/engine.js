@@ -24,6 +24,14 @@ function rule(agent, type) {
   return agent.rules.find((r) => r.type === type) || null;
 }
 
+// Έλεγχος τμήματος απαίτησης: 'verification+call' σημαίνει ότι ο agent
+// πρέπει να έχει ΚΑΙ τα δύο τμήματα (π.χ. Verification & call slots —
+// απόφαση προϊσταμένου 10/07/2026: τα κάνει ΜΟΝΟ όποιος έχει ταμπέλα call).
+function deptMatch(agent, department) {
+  if (!department) return true;
+  return department.split('+').every((d) => agent.departments.includes(d));
+}
+
 function restMinFor(agent) {
   return rule(agent, 'split_shift') ? REST_MIN_SPLIT : REST_MIN;
 }
@@ -416,7 +424,7 @@ function phaseOffs(w) {
   const { ctx } = w;
 
   const eligibleFor = (agent, r) =>
-    (!r.department || agent.departments.includes(r.department)) &&
+    deptMatch(agent, r.department) &&
     (!r.skill || agent.skills.has(r.skill));
 
   // Πόσο θα «πονέσει» η μέρα d αν πάρει ρεπό ο agent: αν οι εναπομείναντες
@@ -526,7 +534,7 @@ function phaseRequirements(w, reqByDay) {
         const plan = w.plans.get(a.id);
         const e = plan.days[d];
         if (!e || e.type !== 'work' || e.usedForReq) continue;
-        if (rq.def.department && !a.departments.includes(rq.def.department)) continue;
+        if (!deptMatch(a, rq.def.department)) continue;
         if (rq.def.skill && !a.skills.has(rq.def.skill)) continue;
         const exact = e.start === rq.def.start && e.end === rq.def.end;
         // Αγγελούδη ΣΚ 16:00-24:00 μετράει ως απογευματινός Supervisor
@@ -545,7 +553,7 @@ function phaseRequirements(w, reqByDay) {
       while (rq.covered < rq.def.headcount) {
         const cands = [];
         for (const a of ctx.agents) {
-          if (rq.def.department && !a.departments.includes(rq.def.department)) continue;
+          if (!deptMatch(a, rq.def.department)) continue;
           if (rq.def.skill && !a.skills.has(rq.def.skill)) continue;
           const plan = w.plans.get(a.id);
           const telework = a.workLocation === 'home';
@@ -585,8 +593,8 @@ function phaseRequirements(w, reqByDay) {
             const wantMorning = agentState(w, a.id).rizouMode === 'morning';
             if (isMorning(rq.def.start, rq.def.end) !== wantMorning) score -= 50;
           }
-          // Νυχτερινοί (Νομικού/Μαυραγάνη): κράτα τους για τις νύχτες
-          if (a.canNight && a.skills.has('EUROBANK')) score -= 8;
+          // Σημ.: οι νυχτερινές ανατίθενται ΠΡΙΝ τις απαιτήσεις (φάση 3),
+          // οπότε δεν χρειάζεται να «φυλάμε» τους νυχτερινούς εδώ.
 
           cands.push({ a, score });
         }
@@ -886,6 +894,7 @@ function exportAssignments(w) {
           agentId: a.id, agentName: a.name, date: w.dates[d],
           start: e.start, end: e.end, skill: e.skill || null, label: e.label || null,
           reqLabel: e.reqLabel || null, color: e.color || null, roleId: e.roleId || null,
+          roleName: e.roleName || null,
           location: e.location || 'office', night: e.night || false
         });
       }
@@ -927,4 +936,4 @@ function generateWeek(ctx, weekStart, state) {
   };
 }
 
-module.exports = { generateWeek, shiftAllowedByRules, rule, REST_MIN, REST_MIN_SPLIT, MAX_STREAK };
+module.exports = { generateWeek, shiftAllowedByRules, rule, deptMatch, REST_MIN, REST_MIN_SPLIT, MAX_STREAK };

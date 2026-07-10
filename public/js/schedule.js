@@ -152,7 +152,10 @@
     for (let d = 0; d < 7; d++) {
       const daySegs = segs.filter((s) => s.dayIdx === d).sort((a, b) => a.from - b.from || b.to - a.to);
       for (const sg of daySegs) {
-        let laneIdx = lanes[d].findIndex((lane) => lane[lane.length - 1].to <= sg.from);
+        // Σύγκριση σε ΣΤΡΟΓΓΥΛΕΜΕΝΕΣ ώρες: τα blocks καταλαμβάνουν ωριαίες
+        // ζώνες (όπως στο Excel), οπότε π.χ. 08:00-15:30 και 15:30-23:30
+        // μοιράζονται τη ζώνη 15:00-16:00 και δεν χωρούν στην ίδια λωρίδα
+        let laneIdx = lanes[d].findIndex((lane) => Math.ceil(lane[lane.length - 1].to / 60) <= Math.floor(sg.from / 60));
         if (laneIdx === -1) {
           lanes[d].push([]);
           laneIdx = lanes[d].length - 1;
@@ -487,6 +490,53 @@
       renderTabs();
     } catch (e) {
       toast('Σφάλμα αποθήκευσης: ' + e.message);
+    }
+  });
+
+  // ---------- Excel export (ΒΗΜΑ 6) ----------
+  // Στέλνουμε τις αναθέσεις ΟΠΩΣ φαίνονται στο preview — ό,τι βλέπεις
+  // (συμπεριλαμβανομένων μη αποθηκευμένων αλλαγών και χρωμάτων), αυτό γράφεται.
+  async function download(url, body) {
+    const r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    if (!r.ok) {
+      const d = await r.json().catch(() => ({}));
+      throw new Error(d.error || 'Σφάλμα εξαγωγής');
+    }
+    const dispo = r.headers.get('Content-Disposition') || '';
+    const m = dispo.match(/filename="([^"]+)"/);
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = m ? m[1] : 'Program.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+  }
+
+  $('exportWeekBtn').addEventListener('click', async () => {
+    const w = weekData[cur];
+    if (!w.assignments.length) return toast('Η εβδομάδα είναι κενή — δημιούργησε πρόγραμμα πρώτα');
+    try {
+      await download('/api/export/week', { weekStart: w.weekStart, assignments: w.assignments });
+    } catch (e) {
+      toast(e.message);
+    }
+  });
+
+  $('exportPeriodBtn').addEventListener('click', async () => {
+    const weeks = weekData
+      .filter((w) => w.assignments.length)
+      .map((w) => ({ weekStart: w.weekStart, assignments: w.assignments }));
+    if (!weeks.length) return toast('Δεν υπάρχει πρόγραμμα — δημιούργησε πρώτα');
+    try {
+      await download('/api/export/period', { weeks });
+    } catch (e) {
+      toast(e.message);
     }
   });
 

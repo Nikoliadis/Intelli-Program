@@ -29,9 +29,12 @@ const ROLES = [
   { name: 'Σκούρο κίτρινο (προς επιβεβαίωση)', color_argb: 'FFFFC000' }
 ];
 
-// ---- 3. Απαιτήσεις κάλυψης — ενότητα 4 του spec ----
-// skill: όνομα δεξιότητας ή null, department: 'call'|'verification'|'supervisor'|null,
-// color: όνομα ρόλου για το προτεινόμενο χρώμα (null = εκκρεμεί, βλ. spec §10).
+// ---- 3. Απαιτήσεις κάλυψης — ενότητα 4 + αποφάσεις προϊσταμένου 10/07/2026 ----
+// Ανά βάρδια (πρωί ΚΑΙ απόγευμα): καθημερινές 2 Alpha (ο ένας με ΑΠΕΔ) +
+// 1 International + 2 Eurobank + 1 Verification & call Eurobank (απαιτεί
+// ταμπέλα verification ΚΑΙ call)· ΣΚ: 2 Alpha + 2 Eurobank, χωρίς ΑΠΕΔ/
+// International — ό,τι περισσεύει πάει verification (fillers).
+// department με '+' σημαίνει ότι απαιτούνται ΟΛΑ τα τμήματα.
 // Η νυχτερινή αποθηκεύεται ως 23:00-07:00 — η εναλλακτική 23:30-07:30
 // αποφασίζεται από τον generator βάσει του κανόνα Κ4, δεν είναι ξεχωριστή απαίτηση.
 const REQUIREMENTS = {
@@ -39,32 +42,30 @@ const REQUIREMENTS = {
     { start: '06:00', end: '14:00', skill: 'ΠΕΙΡΑΙΩΣ', department: null, headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
     { start: '07:00', end: '15:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     { start: '07:30', end: '15:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '07:30', end: '15:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: null },
+    { start: '07:30', end: '15:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
     { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
-    { start: '08:00', end: '16:00', skill: 'ΛΟΙΠΑ', department: 'call', headcount: 1, label: 'Υπόλοιπα call', color: 'Υπόλοιπα call' },
-    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'verification', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
-    { start: '08:00', end: '16:00', skill: 'ΛΟΙΠΑ', department: 'verification', headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
+    { start: '08:00', end: '16:00', skill: 'ΑΠΕΔ', department: 'call', headcount: 1, label: 'Alpha/ΑΠΕΔ', color: 'Υπόλοιπα call' },
+    { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', headcount: 1, label: 'Alpha', color: 'Υπόλοιπα call' },
+    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'verification+call', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
     { start: '15:00', end: '23:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '15:30', end: '23:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: null },
+    { start: '15:30', end: '23:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
     { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
-    { start: '16:00', end: '24:00', skill: 'ΛΟΙΠΑ', department: 'call', headcount: 1, label: 'Υπόλοιπα call', color: 'Υπόλοιπα call' },
-    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'verification', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
-    { start: '16:00', end: '24:00', skill: 'ΛΟΙΠΑ', department: 'verification', headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
-    { start: '19:00', end: '03:00', skill: 'ΛΟΙΠΑ', department: 'verification', headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
+    { start: '16:00', end: '24:00', skill: 'ΑΠΕΔ', department: 'call', headcount: 1, label: 'Alpha/ΑΠΕΔ', color: 'Υπόλοιπα call' },
+    { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', headcount: 1, label: 'Alpha', color: 'Υπόλοιπα call' },
+    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'verification+call', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
+    { start: '19:00', end: '03:00', skill: null, department: null, headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
     { start: '23:00', end: '07:00', skill: 'EUROBANK', department: null, headcount: 1, label: 'Νυχτερινή Eurobank', color: 'Eurobank' }
   ],
   weekend: [
     { start: '07:00', end: '15:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     { start: '07:30', end: '15:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '07:30', end: '15:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: null },
-    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'verification', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
-    { start: '08:00', end: '16:00', skill: 'ΛΟΙΠΑ', department: 'verification', headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
+    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
+    { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
     { start: '15:00', end: '23:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '15:30', end: '23:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: null },
-    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'verification', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
-    { start: '16:00', end: '24:00', skill: 'ΛΟΙΠΑ', department: 'verification', headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
+    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
+    { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
     { start: '23:00', end: '07:00', skill: 'EUROBANK', department: null, headcount: 1, label: 'Νυχτερινή Eurobank', color: 'Eurobank' }
   ]
 };

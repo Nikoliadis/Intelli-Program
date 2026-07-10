@@ -12,6 +12,7 @@ const agentsRoutes = require('./routes/agents');
 const metaRoutes = require('./routes/meta');
 const periodRoutes = require('./routes/period');
 const scheduleRoutes = require('./routes/schedule');
+const exportRoutes = require('./routes/export');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -38,6 +39,7 @@ app.use('/api/agents', requireAuth, agentsRoutes);
 app.use('/api', requireAuth, metaRoutes);
 app.use('/api', requireAuth, periodRoutes);
 app.use('/api/schedule', requireAuth, scheduleRoutes);
+app.use('/api/export', requireAuth, exportRoutes);
 
 // Health check: επιβεβαιώνει σύνδεση με τη βάση και μετρά βασικά δεδομένα
 app.get('/api/health', async (req, res) => {
