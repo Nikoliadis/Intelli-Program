@@ -87,6 +87,13 @@ function check(name, cond, detail) {
       if (!daysWorked.has(a.agentId)) daysWorked.set(a.agentId, new Set());
       daysWorked.get(a.agentId).add(a.date);
     }
+    // Η άδεια/ασθένεια μετράει ως ΕΡΓΑΣΙΜΗ για το Κ10 (13/07/2026)
+    for (const a of offRows) {
+      if (a.reason !== 'leave' && a.reason !== 'sick') continue;
+      if (k10Exempt.has(a.agentId)) continue;
+      if (!daysWorked.has(a.agentId)) daysWorked.set(a.agentId, new Set());
+      daysWorked.get(a.agentId).add(a.date);
+    }
     let bad = null;
     for (const [id, dates] of daysWorked) {
       const sorted = [...dates].sort();
@@ -362,8 +369,11 @@ function check(name, cond, detail) {
     for (const wk of result.weeks) {
       const sunday = wk.dates[6];
       const workedSunday = wk.assignments.some((a) => !a.off && a.agentId === nikId && a.date === sunday);
-      const leave = wk.assignments.some((a) => a.off && a.agentId === nikId && a.date === sunday && (a.reason === 'leave' || a.reason === 'sick'));
-      if (!workedSunday && !leave) {
+      // Άδεια/ασθένεια ΚΑΙ δικά του αιτήματα ρεπό δεν μετράνε στο όριο —
+      // μόνο τα ρεπό που διάλεξε ο generator (13/07/2026)
+      const excused = wk.assignments.some((a) => a.off && a.agentId === nikId && a.date === sunday &&
+        ['leave', 'sick', 'repo_request'].includes(a.reason));
+      if (!workedSunday && !excused) {
         const mk = sunday.slice(0, 7);
         nikSundaysOff.set(mk, (nikSundaysOff.get(mk) || 0) + 1);
       }

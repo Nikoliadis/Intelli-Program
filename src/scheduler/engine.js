@@ -77,6 +77,16 @@ function worked(plan, d) {
   return plan.days[d] && plan.days[d].type === 'work';
 }
 
+// Η ΑΔΕΙΑ/ΑΣΘΕΝΕΙΑ μετράει ως ΕΡΓΑΣΙΜΗ μέρα για το Κ10 (13/07/2026):
+// συνεχίζει τη σειρά συνεχόμενων ημερών — μετά από 5 μέρες άδειας
+// χρειάζεται ΡΕΠΟ, όχι βάρδια. Μόνο το ρεπό κόβει τη σειρά.
+function countsAsWork(plan, d) {
+  const e = plan.days[d];
+  if (!e) return false;
+  if (e.type === 'work') return true;
+  return e.reason === 'leave' || e.reason === 'sick';
+}
+
 function assignedCount(plan) {
   return plan.days.filter((x) => x && x.type === 'work').length;
 }
@@ -129,27 +139,43 @@ function k10ok(w, plan, d) {
   // Εξαίρεση 6ημέρου (Τσιτσικώστες — απόφαση 11/07/2026)
   if (rule(plan.agent, 'no_streak_limit')) return true;
   const st = agentState(w, plan.agent.id);
-  // Πίσω
+  // Πίσω — η άδεια/ασθένεια ΣΥΝΕΧΙΖΕΙ τη σειρά (μόνο το ρεπό την κόβει)
   let back = 0;
   for (let i = d - 1; i >= 0; i--) {
-    if (worked(plan, i)) back++;
-    else if (plan.days[i]) break; // ρεπό/άδεια κόβει τη σειρά
-    else break; // κενό = δεν έχει (ακόμα) βάρδια — συντηρητικά κόβει
+    if (countsAsWork(plan, i)) back++;
+    else break;
   }
   // Αν η σειρά φτάνει στη Δευτέρα, μετράει και το streak της προηγούμενης εβδομάδας
   if (back === d) back += st.streak;
-  // Μπροστά
+  // Μπροστά — αν η σειρά φτάνει ως την Κυριακή, μετράει και η άδεια που
+  // ξεκινά την επόμενη Δευτέρα (η άδεια είναι εργάσιμη — 13/07/2026)
   let fwd = 0;
-  for (let i = d + 1; i < 7; i++) {
-    if (worked(plan, i)) fwd++;
+  let i = d + 1;
+  for (; i < 7; i++) {
+    if (countsAsWork(plan, i)) fwd++;
     else break;
   }
+  if (i === 7) fwd += leadingLeaveNextWeek(w, plan.agent.id);
   return back + 1 + fwd <= MAX_STREAK;
 }
 
+// Πόσες συνεχόμενες μέρες ΑΔΕΙΑΣ/ασθένειας ξεκινούν την ΕΠΟΜΕΝΗ Δευτέρα —
+// μετράνε ως εργάσιμες (13/07/2026), οπότε το 6ήμερο ελέγχεται ΚΑΙ μπροστά:
+// όποιος φεύγει με άδεια δεν πρέπει να «φορτωθεί» βάρδιες ακριβώς πριν.
+function leadingLeaveNextWeek(w, agentId) {
+  let n = 0;
+  for (let j = 7; j < 14; j++) {
+    const t = w.ctx.timeOff.get(`${agentId}|${addDays(w.weekStart, j)}`);
+    if (t === 'leave' || t === 'sick') n++;
+    else break;
+  }
+  return n;
+}
+
 // Κ10 για την επιλογή ρεπό: με δεδομένα offs (σύνολο indexes) και υπόθεση
-// εργασίας σε όλες τις άλλες μέρες, η μέγιστη σειρά ≤ 5;
-function offsKeepStreakOk(offs, initialStreak) {
+// εργασίας σε όλες τις άλλες μέρες, η μέγιστη σειρά ≤ 5 — μαζί με τυχόν
+// άδεια που ξεκινά αμέσως μετά την Κυριακή (trailingLeave).
+function offsKeepStreakOk(offs, initialStreak, trailingLeave = 0) {
   let run = initialStreak;
   for (let d = 0; d < 7; d++) {
     if (offs.has(d)) {
@@ -159,7 +185,7 @@ function offsKeepStreakOk(offs, initialStreak) {
       if (run > MAX_STREAK) return false;
     }
   }
-  return true;
+  return run + trailingLeave <= MAX_STREAK;
 }
 
 // ---------- Έλεγχος κανόνων agent για συγκεκριμένη βάρδια ----------
@@ -585,9 +611,14 @@ function phaseOffs(w) {
       for (const opt of options) {
         // Κ10: με αυτά τα ρεπό (και όσα ήδη υπάρχουν) κόβεται κάθε 6άρι;
         const offs = new Set(opt);
-        for (let d = 0; d < 7; d++) if (plan.days[d] && plan.days[d].type === 'off') offs.add(d);
+        // Η άδεια/ασθένεια ΔΕΝ μπαίνει στα «ρεπό» — μετράει ως εργάσιμη
+        // για τη σειρά συνεχόμενων ημερών (13/07/2026)
+        for (let d = 0; d < 7; d++) {
+          const e = plan.days[d];
+          if (e && e.type === 'off' && e.reason !== 'leave' && e.reason !== 'sick') offs.add(d);
+        }
         if (opt.some((d) => plan.days[d])) continue;
-        if (!rule(a, 'no_streak_limit') && !offsKeepStreakOk(offs, st.streak)) continue;
+        if (!rule(a, 'no_streak_limit') && !offsKeepStreakOk(offs, st.streak, leadingLeaveNextWeek(w, a.id))) continue;
 
         // Νικολιάδης (sunday_worker): το πολύ 1 ρεπό Κυριακής τον μήνα (hard)
         if (opt.includes(6) && rule(a, 'sunday_worker')) {
@@ -700,8 +731,10 @@ function phaseRequirements(w, reqByDay) {
           score += (workTarget(plan) - assignedCount(plan)) * 4;
           // Σ3: λιγότερα ΣΚ ιστορικά → προτεραιότητα το ΣΚ
           if (d >= 5) score -= Math.min(st.weekends, 10) * 2;
-          // Νικολιάδης: δουλεύει Κυριακές — βολεύει (11/07/2026)
-          if (d === 6 && rule(a, 'sunday_worker')) score += 8;
+          // Νικολιάδης: δουλεύει Κυριακές — βολεύει (11/07/2026). Ισχυρό bonus:
+          // με το «ΣΚ MAX» πρέπει να κερδίζει θέση Κυριακής, αλλιώς μένει
+          // άθελά του με 2ο ρεπό Κυριακής τον μήνα
+          if (d === 6 && rule(a, 'sunday_worker')) score += 40;
           // Προτιμήσεις πρωί/απόγευμα (soft)
           if (rule(a, 'prefer_morning')) score += isMorning(shS, shE) ? 5 : -6;
           if (rule(a, 'prefer_afternoon')) score += isAfternoon(shS) ? 5 : -6;
@@ -989,13 +1022,14 @@ function computeNextState(w) {
     const plan = w.plans.get(a.id);
     const st = agentState(w, a.id);
 
-    // Streak: συνεχόμενες εργάσιμες μέχρι και την Κυριακή
+    // Streak: συνεχόμενες εργάσιμες μέχρι και την Κυριακή — η άδεια/ασθένεια
+    // μετράει ως εργάσιμη (13/07/2026)
     let streak = 0;
     for (let d = 6; d >= 0; d--) {
-      if (worked(plan, d)) streak++;
+      if (countsAsWork(plan, d)) streak++;
       else break;
     }
-    if (streak === 7) streak += st.streak; // ολόκληρη εβδομάδα δουλεμένη (θεωρητικά αδύνατο με Κ2)
+    if (streak === 7) streak += st.streak; // ολόκληρη εβδομάδα (π.χ. πλήρης άδεια) — συνεχίζει από την προηγούμενη
 
     // Λήξη τελευταίας βάρδιας
     let lastEndAbs = st.lastEndAbs;

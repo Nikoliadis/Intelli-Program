@@ -123,9 +123,11 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
 
   // ---------- Κ10: μέγιστο 5 συνεχόμενες — με σύνορα και προς τις δύο πλευρές ----------
   const allWorkDates = new Map(); // agentId → Set(dayNum)
+  // Η άδεια/ασθένεια μετράει ως ΕΡΓΑΣΙΜΗ για το Κ10 (13/07/2026) —
+  // μόνο το ρεπό κόβει τη σειρά συνεχόμενων ημερών
   const collect = (arr) => {
     for (const a of arr || []) {
-      if (a.off) continue;
+      if (a.off && a.reason !== 'leave' && a.reason !== 'sick') continue;
       if (!allWorkDates.has(a.agentId)) allWorkDates.set(a.agentId, new Set());
       allWorkDates.get(a.agentId).add(dayNum(a.date));
     }
@@ -294,7 +296,11 @@ async function computeStateFromAssignments(weekStart, assignments, prevState) {
   for (const ag of ctx.agents) {
     const prev = base[ag.id] || { streak: 0, lastEndAbs: -Infinity, nights: 0, weekends: 0, count1903: 0, rizouMode: 'morning' };
     const rows = (assignments || []).filter((a) => !a.off && a.agentId === ag.id);
-    const workedDays = new Set(rows.map((r) => dayNum(r.date)));
+    // Streak: η άδεια/ασθένεια μετράει ως εργάσιμη (13/07/2026)
+    const leaveDays = (assignments || [])
+      .filter((a) => a.off && a.agentId === ag.id && (a.reason === 'leave' || a.reason === 'sick'))
+      .map((a) => dayNum(a.date));
+    const workedDays = new Set([...rows.map((r) => dayNum(r.date)), ...leaveDays]);
 
     // Streak που καταλήγει στην Κυριακή
     let streak = 0;
