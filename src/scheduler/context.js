@@ -42,12 +42,14 @@ async function loadContext(periodStart, periodEnd) {
   }
 
   // --- Απαιτήσεις κάλυψης ---
+  // Η σειρά (id) έχει σημασία: ειδικά/ακριβή slots πρώτα, period-based μετά,
+  // ώστε κάθε άτομο να μετρηθεί σε ΜΙΑ κατηγορία (απόφαση 11/07/2026).
   const [reqRows] = await pool.query(
     `SELECT sr.*, s.name AS skill_name, ro.name AS role_name, ro.color_argb
      FROM shift_requirements sr
      LEFT JOIN skills s ON s.id = sr.skill_id
      LEFT JOIN roles ro ON ro.id = sr.role_id
-     ORDER BY sr.start_time`
+     ORDER BY sr.id`
   );
   const requirements = { weekday: [], weekend: [] };
   for (const r of reqRows) {
@@ -57,6 +59,7 @@ async function loadContext(periodStart, periodEnd) {
       end: r.end_time,
       skill: r.skill_name,
       department: r.department,
+      period: r.period || null,
       headcount: r.headcount,
       label: r.label,
       roleId: r.role_id,
@@ -64,11 +67,13 @@ async function loadContext(periodStart, periodEnd) {
     });
   }
 
-  // --- Λίστα 19:00-03:00 (Κ9) ---
+  // --- Λίστες επιλεξιμότητας ανά βάρδια (Κ9 19:00-03:00, λίστα 06:00-14:00) ---
   const [eligRows] = await pool.query('SELECT * FROM shift_eligibility');
-  const eligibility = new Map(); // agent_id → {maxPerWeek, location, notAlone}
+  const eligibility = new Map(); // 'start-end' → Map(agent_id → {maxPerWeek, location, notAlone})
   for (const e of eligRows) {
-    eligibility.set(e.agent_id, {
+    const key = `${e.shift_start}-${e.shift_end}`;
+    if (!eligibility.has(key)) eligibility.set(key, new Map());
+    eligibility.get(key).set(e.agent_id, {
       maxPerWeek: e.max_per_week,
       location: e.location,
       notAlone: e.not_alone === 1

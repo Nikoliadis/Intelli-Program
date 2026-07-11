@@ -29,44 +29,68 @@ const ROLES = [
   { name: 'Σκούρο κίτρινο (προς επιβεβαίωση)', color_argb: 'FFFFC000' }
 ];
 
-// ---- 3. Απαιτήσεις κάλυψης — ενότητα 4 + αποφάσεις προϊσταμένου 10/07/2026 ----
-// Ανά βάρδια (πρωί ΚΑΙ απόγευμα): καθημερινές 2 Alpha (ο ένας με ΑΠΕΔ) +
-// 1 International + 2 Eurobank + 1 Verification & call Eurobank (απαιτεί
-// ταμπέλα verification ΚΑΙ call)· ΣΚ: 2 Alpha + 2 Eurobank, χωρίς ΑΠΕΔ/
-// International — ό,τι περισσεύει πάει verification (fillers).
+// ---- 3. Απαιτήσεις κάλυψης — αποφάσεις προϊσταμένου 10-11/07/2026 ----
+// period: 'morning'/'afternoon' = απαίτηση «Χ άτομα του ρόλου σε πρωινή/
+// απογευματινή βάρδια» (οποιοδήποτε ωράριο της περιόδου — το start/end είναι
+// το ΠΡΟΕΠΙΛΕΓΜΕΝΟ για νέες τοποθετήσεις). period null = ακριβές ωράριο.
 // department με '+' σημαίνει ότι απαιτούνται ΟΛΑ τα τμήματα.
+// Καθημερινές: Πειραιώς 9 πρωί (1 εξ αυτών 06:00-14:00 από τη λίστα 6-2)
+// + 2 απόγευμα, ΗΡΩΝ 3 πρωί + 2 απόγευμα, Verification 4 πρωί + 5 απόγευμα
+// (ΟΠΩΣΔΗΠΟΤΕ — ξεχωριστές μετρήσεις, κάθε άτομο μετρά σε ΜΙΑ κατηγορία),
+// calls: 2 Alpha (1 ΑΠΕΔ) + 1 International + 2 Eurobank + 1 Verif&call Euro.
+// ΣΚ: Πειραιώς 1+1, Verification 1+1, Eurobank 2+2, Alpha 2+2.
+// Η ΣΕΙΡΑ έχει σημασία: τα ακριβή/ειδικά πρώτα, τα γενικά (period) μετά,
+// ώστε κάθε άτομο να μετρηθεί στη σωστή κατηγορία.
 // Η νυχτερινή αποθηκεύεται ως 23:00-07:00 — η εναλλακτική 23:30-07:30
-// αποφασίζεται από τον generator βάσει του κανόνα Κ4, δεν είναι ξεχωριστή απαίτηση.
+// αποφασίζεται από τον generator βάσει του κανόνα Κ4.
 const REQUIREMENTS = {
   weekday: [
-    { start: '06:00', end: '14:00', skill: 'ΠΕΙΡΑΙΩΣ', department: null, headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
-    { start: '07:00', end: '15:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
-    { start: '07:30', end: '15:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '07:30', end: '15:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
-    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
-    { start: '08:00', end: '16:00', skill: 'ΑΠΕΔ', department: 'call', headcount: 1, label: 'Alpha/ΑΠΕΔ', color: 'Υπόλοιπα call' },
-    { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', headcount: 1, label: 'Alpha', color: 'Υπόλοιπα call' },
-    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'verification+call', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
-    { start: '15:00', end: '23:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
-    { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '15:30', end: '23:30', skill: 'INTERNATIONAL', department: 'call', headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
-    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
-    { start: '16:00', end: '24:00', skill: 'ΑΠΕΔ', department: 'call', headcount: 1, label: 'Alpha/ΑΠΕΔ', color: 'Υπόλοιπα call' },
-    { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', headcount: 1, label: 'Alpha', color: 'Υπόλοιπα call' },
-    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'verification+call', headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
-    { start: '19:00', end: '03:00', skill: null, department: null, headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
-    { start: '23:00', end: '07:00', skill: 'EUROBANK', department: null, headcount: 1, label: 'Νυχτερινή Eurobank', color: 'Eurobank' }
+    // Το 06:00-14:00 καλύπτεται ΑΠΟΚΛΕΙΣΤΙΚΑ από τη λίστα επιλεξιμότητας
+    // (Παπασαράντου Κ., Νικολιάδης, Νικολιάδη, Οικονομοπούλου, Λαμπριανίδου,
+    // Νικολαΐδου + Ρίζου μόνο ΣΚ) με δίκαιη εναλλαγή — απόφαση 12/07/2026.
+    // Χωρίς απαίτηση skill: η λίστα ορίζει ποιοι το κάνουν (όπως η 19:00-03:00).
+    { start: '06:00', end: '14:00', skill: null, department: null, period: null, headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
+    { start: '07:00', end: '15:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
+    { start: '07:30', end: '15:30', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank', color: 'Eurobank' },
+    { start: '07:30', end: '15:30', skill: 'INTERNATIONAL', department: 'call', period: null, headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
+    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
+    { start: '08:00', end: '16:00', skill: 'ΑΠΕΔ', department: 'call', period: null, headcount: 1, label: 'Alpha/ΑΠΕΔ', color: 'Υπόλοιπα call' },
+    { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', period: null, headcount: 1, label: 'Alpha', color: 'Υπόλοιπα call' },
+    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'verification+call', period: null, headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
+    { start: '09:00', end: '17:00', skill: 'ΗΡΩΝ', department: null, period: 'morning', headcount: 3, label: 'Ήρων', color: 'Ήρων' },
+    { start: '08:00', end: '16:00', skill: 'ΠΕΙΡΑΙΩΣ', department: null, period: 'morning', headcount: 8, label: 'Πειραιώς', color: 'Πειραιώς' },
+    { start: '08:00', end: '16:00', skill: null, department: 'verification', period: 'morning', headcount: 4, label: 'Verification', color: 'Verification' },
+    { start: '15:00', end: '23:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
+    { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank', color: 'Eurobank' },
+    { start: '15:30', end: '23:30', skill: 'INTERNATIONAL', department: 'call', period: null, headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
+    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
+    { start: '16:00', end: '24:00', skill: 'ΑΠΕΔ', department: 'call', period: null, headcount: 1, label: 'Alpha/ΑΠΕΔ', color: 'Υπόλοιπα call' },
+    { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', period: null, headcount: 1, label: 'Alpha', color: 'Υπόλοιπα call' },
+    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'verification+call', period: null, headcount: 1, label: 'Verification & call Eurobank', color: 'Verification' },
+    { start: '16:00', end: '24:00', skill: 'ΗΡΩΝ', department: null, period: 'afternoon', headcount: 2, label: 'Ήρων', color: 'Ήρων' },
+    { start: '16:00', end: '24:00', skill: 'ΠΕΙΡΑΙΩΣ', department: null, period: 'afternoon', headcount: 2, label: 'Πειραιώς', color: 'Πειραιώς' },
+    { start: '16:00', end: '24:00', skill: null, department: 'verification', period: 'afternoon', headcount: 5, label: 'Verification', color: 'Verification' },
+    { start: '19:00', end: '03:00', skill: null, department: null, period: null, headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
+    { start: '23:00', end: '07:00', skill: 'EUROBANK', department: null, period: null, headcount: 1, label: 'Νυχτερινή Eurobank', color: 'Eurobank' }
   ],
   weekend: [
-    { start: '07:00', end: '15:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
-    { start: '07:30', end: '15:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
-    { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
-    { start: '15:00', end: '23:00', skill: null, department: 'supervisor', headcount: 1, label: 'Supervisor', color: 'Supervisor' },
-    { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank', color: 'Eurobank' },
-    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
-    { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
-    { start: '23:00', end: '07:00', skill: 'EUROBANK', department: null, headcount: 1, label: 'Νυχτερινή Eurobank', color: 'Eurobank' }
+    // ΣΚ: ο πρωινός Πειραιώς δουλεύει ΑΚΡΙΒΩΣ 06:00-14:00, από τη λίστα
+    // επιλεξιμότητας του 06:00 με δίκαιη εναλλαγή (απόφαση 12/07/2026).
+    // ΠΡΩΤΟ στη σειρά: το pool του είναι το πιο περιορισμένο — να μην
+    // «καίγονται» τα μέλη της λίστας σε άλλα slots (π.χ. Νικολιάδης σε Eurobank)
+    { start: '06:00', end: '14:00', skill: null, department: null, period: null, headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
+    { start: '07:00', end: '15:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
+    { start: '07:30', end: '15:30', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank', color: 'Eurobank' },
+    { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
+    { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', period: null, headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
+    { start: '08:00', end: '16:00', skill: null, department: 'verification', period: 'morning', headcount: 1, label: 'Verification', color: 'Verification' },
+    { start: '15:00', end: '23:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
+    { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank', color: 'Eurobank' },
+    { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
+    { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', period: null, headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
+    { start: '16:00', end: '24:00', skill: 'ΠΕΙΡΑΙΩΣ', department: null, period: 'afternoon', headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
+    { start: '16:00', end: '24:00', skill: null, department: 'verification', period: 'afternoon', headcount: 1, label: 'Verification', color: 'Verification' },
+    { start: '23:00', end: '07:00', skill: 'EUROBANK', department: null, period: null, headcount: 1, label: 'Νυχτερινή Eurobank', color: 'Eurobank' }
   ]
 };
 
@@ -129,12 +153,12 @@ async function seed() {
         for (const r of reqs) {
           await conn.query(
             `INSERT INTO shift_requirements
-             (day_type, start_time, end_time, skill_id, department, headcount, label, role_id)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+             (day_type, start_time, end_time, skill_id, department, period, headcount, label, role_id)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             [
               dayType, r.start, r.end,
               r.skill ? skillId[r.skill] : null,
-              r.department, r.headcount, r.label,
+              r.department, r.period || null, r.headcount, r.label,
               r.color ? roleId[r.color] : null
             ]
           );

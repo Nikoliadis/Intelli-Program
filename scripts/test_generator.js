@@ -78,9 +78,12 @@ function check(name, cond, detail) {
   console.log('\n=== ΑΥΤΟΜΑΤΟΙ ΕΛΕΓΧΟΙ ===\n');
 
   // ---------- 1. Κ10: κανένα 6ήμερο (σε ΟΛΗ την περίοδο, με σύνορα) ----------
+  // Εξαίρεση (11/07/2026): οι δύο Τσιτσικώστες δεν έχουν όριο 6ημέρου
   {
+    const k10Exempt = new Set([idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ'], idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ']]);
     const daysWorked = new Map(); // agentId → Set(dates)
     for (const a of workRows) {
+      if (k10Exempt.has(a.agentId)) continue;
       if (!daysWorked.has(a.agentId)) daysWorked.set(a.agentId, new Set());
       daysWorked.get(a.agentId).add(a.date);
     }
@@ -155,17 +158,22 @@ function check(name, cond, detail) {
         if (!map.has(a.agentId)) map.set(a.agentId, new Set());
         map.get(a.agentId).add(a.date);
       }
+      // Εξαίρεση Κ2: οι Τσιτσικώστες με καλοκαιρινό weekly_pattern (11/07/2026 —
+      // ο Λεωνίδας δουλεύει 7/7 χωρίς ρεπό)
+      const k2Exempt = new Set([idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ'], idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ']]);
       for (const ag of agents) {
         const wcount = (workDays.get(ag.id) || new Set()).size;
         const ocount = (offDays.get(ag.id) || new Set()).size;
         const lcount = (leaveDays.get(ag.id) || new Set()).size;
-        if (wcount > 5) { bad = `${ag.full_name} εβδ. ${wk.weekStart}: ${wcount} εργάσιμες`; break; }
-        if (ocount + lcount < 2 && wcount + ocount + lcount === 7) { bad = `${ag.full_name} εβδ. ${wk.weekStart}: μόνο ${ocount} ρεπό`; break; }
+        if (!k2Exempt.has(ag.id)) {
+          if (wcount > 5) { bad = `${ag.full_name} εβδ. ${wk.weekStart}: ${wcount} εργάσιμες`; break; }
+          if (ocount + lcount < 2 && wcount + ocount + lcount === 7) { bad = `${ag.full_name} εβδ. ${wk.weekStart}: μόνο ${ocount} ρεπό`; break; }
+        }
         if (wcount + ocount + lcount !== 7) { bad = `${ag.full_name} εβδ. ${wk.weekStart}: ${wcount}+${ocount}+${lcount} ≠ 7 μέρες`; break; }
       }
       if (bad) break;
     }
-    check('Κ2: μέγιστο 5 εργάσιμες, τουλάχιστον 2 ρεπό, 7 μέρες λογαριασμένες για όλους', !bad, bad);
+    check('Κ2: μέγιστο 5 εργάσιμες, τουλάχιστον 2 ρεπό (εκτός Τσιτσικωστών), 7 μέρες λογαριασμένες', !bad, bad);
   }
 
   // ---------- 4. Κ5: σταθερά ωράρια στη θέση τους ----------
@@ -217,16 +225,30 @@ function check(name, cond, detail) {
     }
     check('Κ5/constraints: Αγγελούδη — ρεπό Δευ+Τρι, ΣΚ 16:00-24:00', !aggBad, aggBad);
 
-    // Τσιτσικώστας Αλ.: ρεπό Τετ+Πεμ
-    const tsId = idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ'];
-    let tsBad = null;
-    for (const wk of result.weeks) {
-      for (const date of wk.dates) {
-        const dow = dayOfWeek(date);
-        if ((dow === 3 || dow === 4) && !offIdx.has(`${tsId}|${date}`)) tsBad = `${date}: δεν έχει ρεπό (Τετ/Πεμ)`;
+    // Καλοκαιρινά weekly_pattern Τσιτσικωστών (από 15/06 — 11/07/2026)
+    const PATTERNS = {
+      'ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ': { 1: '18:00-24:00', 2: '13:00-21:00', 3: '18:00-24:00', 4: '13:00-21:00', 7: '16:00-24:00' },
+      'ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ': { 1: '20:00-24:00', 2: '20:00-24:00', 3: '18:00-22:00', 4: '15:00-23:00', 5: '18:00-22:00', 6: '15:00-23:00', 7: '16:00-24:00' }
+    };
+    for (const [name, pattern] of Object.entries(PATTERNS)) {
+      const id = idOf[name];
+      let pBad = null;
+      for (const wk of result.weeks) {
+        for (const date of wk.dates) {
+          const dow = dayOfWeek(date);
+          const want = pattern[dow];
+          const rows = workIdx.get(`${id}|${date}`) || [];
+          if (want) {
+            if (!rows.some((r) => `${r.start}-${r.end}` === want)) { pBad = `${date}: αναμενόταν ${want}, βρέθηκε ${rows.map((r) => r.start + '-' + r.end).join(',') || 'ρεπό'}`; break; }
+          } else if (rows.length) {
+            pBad = `${date}: δουλεύει ενώ το μοτίβο δίνει ρεπό`;
+            break;
+          }
+        }
+        if (pBad) break;
       }
+      check(`Καλοκαιρινό πρόγραμμα ${name}${name.includes('ΛΕΩΝ') ? ' (7/7 χωρίς ρεπό)' : ' (Παρ+Σαβ ρεπό)'}`, !pBad, pBad);
     }
-    check('Constraints: Τσιτσικώστας Αλ. — σταθερά ρεπό Τετ+Πεμ', !tsBad, tsBad);
 
     // Κουλογιάννης: σπαστό 09-14 + 21-24 καθημερινές, ΣΚ ρεπό
     const koulId = idOf['ΚΟΥΛΟΓΙΑΝΝΗΣ ΚΥΡΙΑΚΟΣ'];
@@ -297,12 +319,85 @@ function check(name, cond, detail) {
         bad = `${who} ${a.date} (μέρα σχολής): ${a.start}-${a.end} αντί για ρεπό/τηλεργασία 06:00-14:00`;
         break;
       }
-      if (a.agentId === alikiId && !ruleDays.includes(dow) && !['07:30', '08:00'].includes(a.start)) {
+      // ΣΚ: το 06:00-14:00 επιτρέπεται («μόνο αν βγαίνει» — 11/07/2026)
+      if (a.agentId === alikiId && !ruleDays.includes(dow) && !['07:30', '08:00'].includes(a.start) &&
+          !(dow >= 6 && a.start === '06:00' && a.end === '14:00')) {
         bad = `Αλίκη ${a.date}: έναρξη ${a.start} (επιτρεπτές 07:30/08:00)`;
         break;
       }
     }
     check('Κ3: Νικολιάδης/Νικολιάδη Αλίκη — μόνο πρωί, μέρες σχολής ρεπό ή τηλεργασία 06:00-14:00', !bad, bad);
+  }
+
+  // ---------- 7. Όριο Κυριακών/μήνα (11/07/2026) ----------
+  {
+    const [exemptRows] = await pool.query(
+      `SELECT id, full_name FROM agents WHERE active = 1 AND
+       (departments LIKE '%supervisor%' OR weekend_shift IS NOT NULL OR (fixed_shift_start IS NOT NULL AND fixed_days IS NOT NULL))`
+    );
+    const exempt = new Set(exemptRows.map((r) => r.id));
+    // Σταθερό καλοκαιρινό μοτίβο = σταθεροί → εκτός ορίου Κυριακών
+    exempt.add(idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ']);
+    exempt.add(idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ']);
+    const nikId = idOf['ΝΙΚΟΛΙΑΔΗΣ ΝΙΚΟΣ'];
+    const perMonth = new Map(); // agentId|YYYY-MM → count
+    for (const a of workRows) {
+      const dow = dayOfWeek(a.date);
+      if (dow !== 7) continue;
+      const k = `${a.agentId}|${a.date.slice(0, 7)}`;
+      if (!perMonth.has(k)) perMonth.set(k, new Set());
+      perMonth.get(k).add(a.date);
+    }
+    let bad = null;
+    for (const [k, ds] of perMonth) {
+      const [idStr, mk] = k.split('|');
+      const id = Number(idStr);
+      if (exempt.has(id) || id === nikId) continue; // Νικολιάδης: χωρίς όριο δουλεμένων Κυριακών
+      if (ds.size > 2) { bad = `${nameOf[id]}: ${ds.size} Κυριακές τον ${mk} (όριο 2)`; break; }
+    }
+    check('Όριο Κυριακών: ≤2/μήνα (μη σταθεροί, εκτός supervisors)', !bad, bad);
+
+    // Νικολιάδης: δουλεύει Κυριακές — το πολύ 1 ΡΕΠΟ Κυριακής/μήνα (12/07/2026)
+    const nikSundaysOff = new Map(); // month → count
+    for (const wk of result.weeks) {
+      const sunday = wk.dates[6];
+      const workedSunday = wk.assignments.some((a) => !a.off && a.agentId === nikId && a.date === sunday);
+      const leave = wk.assignments.some((a) => a.off && a.agentId === nikId && a.date === sunday && (a.reason === 'leave' || a.reason === 'sick'));
+      if (!workedSunday && !leave) {
+        const mk = sunday.slice(0, 7);
+        nikSundaysOff.set(mk, (nikSundaysOff.get(mk) || 0) + 1);
+      }
+    }
+    const nikBad = [...nikSundaysOff.entries()].find(([, n]) => n > 1);
+    check('Νικολιάδης: το πολύ 1 ρεπό Κυριακής τον μήνα — τις υπόλοιπες δουλεύει',
+      !nikBad, nikBad ? `${nikBad[1]} ρεπό Κυριακής τον ${nikBad[0]}` : null);
+  }
+
+  // ---------- 8. Λίστα 06:00-14:00 (11/07/2026) ----------
+  {
+    const [eligRows62] = await pool.query(
+      "SELECT agent_id FROM shift_eligibility WHERE shift_start = '06:00' AND shift_end = '14:00'"
+    );
+    const allowed62 = new Set(eligRows62.map((r) => r.agent_id));
+    let bad = null;
+    for (const a of workRows) {
+      if (a.start === '06:00' && a.end === '14:00' && !allowed62.has(a.agentId)) {
+        bad = `${nameOf[a.agentId]} πήρε 06:00-14:00 (${a.date}) εκτός λίστας`;
+        break;
+      }
+    }
+    check(`Το 06:00-14:00 ΜΟΝΟ από τη λίστα των ${allowed62.size} εγκεκριμένων`, !bad, bad);
+
+    // Νικολιάδης/Νικολιάδη: 6-2 μόνο στις μέρες τους (ΣΚ επιτρεπτό)
+    const nikDays = { [idOf['ΝΙΚΟΛΙΑΔΗΣ ΝΙΚΟΣ']]: [1, 5], [idOf['ΝΙΚΟΛΙΑΔΗ ΑΛΙΚΗ']]: [2, 5] };
+    let bad2 = null;
+    for (const a of workRows) {
+      const days = nikDays[a.agentId];
+      if (!days || a.start !== '06:00' || a.end !== '14:00') continue;
+      const dow = dayOfWeek(a.date);
+      if (!days.includes(dow) && dow < 6) { bad2 = `${nameOf[a.agentId]} 06:00-14:00 ${a.date} (μέρα ${dow})`; break; }
+    }
+    check('Νικολιάδης 6-2 μόνο Δευ/Παρ, Νικολιάδη μόνο Τρι/Παρ (ΣΚ επιτρεπτό)', !bad2, bad2);
   }
 
   // ---------- Σύνοψη κάλυψης ----------

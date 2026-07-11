@@ -109,7 +109,10 @@ function shortNames(assignments) {
   return map;
 }
 
-// Τμήματα ημέρας (οι βάρδιες που περνούν μεσάνυχτα σπάνε σε δύο μέρες)
+// Τμήματα ημέρας. Η ΝΥΧΤΕΡΙΝΗ (έναρξη ≥23:00) εμφανίζεται ΟΛΟΚΛΗΡΗ στη
+// μέρα που ξεκινά — το κομμάτι μετά τα μεσάνυχτα «ανεβαίνει» στις ζώνες
+// 00:00+ της ΙΔΙΑΣ στήλης (πρακτική του γραφείου — απόφαση 11/07/2026).
+// Η 19:00-03:00 συνεχίζει κανονικά στο μπλοκ της επόμενης μέρας.
 function daySegments(dates, assignments) {
   const segs = [];
   for (const a of assignments || []) {
@@ -120,7 +123,12 @@ function daySegments(dates, assignments) {
     let e = toMin(a.end);
     if (e <= s) {
       segs.push({ d, from: s, to: 1440, a, cont: false });
-      if (d < 6) segs.push({ d: d + 1, from: 0, to: e, a, cont: true });
+      if (s >= 1380) {
+        // Νυχτερινή 23:00/23:30: το πρωινό κομμάτι στην ΙΔΙΑ μέρα
+        segs.push({ d, from: 0, to: e, a, cont: true });
+      } else if (d < 6) {
+        segs.push({ d: d + 1, from: 0, to: e, a, cont: true });
+      }
     } else {
       segs.push({ d, from: s, to: e, a, cont: false });
     }

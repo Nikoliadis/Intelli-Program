@@ -6,7 +6,7 @@
 // Οι έλεγχοι Κ8/Κ10 κοιτούν ΚΑΙ προς τις γειτονικές εβδομάδες.
 const { loadContext } = require('./context');
 const { shiftAllowedByRules, rule, deptMatch, REST_MIN, REST_MIN_SPLIT, MAX_STREAK } = require('./engine');
-const { shiftAbs, toMin, dayNum } = require('./time');
+const { shiftAbs, toMin, dayNum, isMorning, isAfternoon } = require('./time');
 const { addDays, dayOfWeek } = require('../utils/dates');
 
 // Ενοποίηση αναθέσεων ίδιου agent+μέρας (σπαστό) σε ένα χρονικό διάστημα
@@ -76,8 +76,10 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
     workDatesByAgent.get(a.agentId).add(a.date);
   }
   for (const [id, ds] of workDatesByAgent) {
+    const ag = agentById.get(id);
+    // Οι agents με καλοκαιρινό weekly_pattern εξαιρούνται (Λεωνίδας 7/7 χωρίς ρεπό)
+    if (ag && rule(ag, 'weekly_pattern')) continue;
     if (ds.size > 5) {
-      const ag = agentById.get(id);
       warn(`Κ2: ${ag ? ag.name : id} έχει ${ds.size} εργάσιμες (μέγιστο 5)`);
     }
   }
@@ -136,6 +138,7 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
   for (const [id, ds] of allWorkDates) {
     const ag = agentById.get(id);
     if (!ag) continue;
+    if (rule(ag, 'no_streak_limit')) continue; // εξαίρεση 6ημέρου (Τσιτσικώστες)
     const sorted = [...ds].sort((a, b) => a - b);
     let runStart = sorted[0];
     let prevD = sorted[0];
@@ -167,11 +170,23 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
       warn(`Κ7: ${ag.name} σε νυχτερινή χωρίς «κάνει βράδυ»`, a.date);
     }
   }
+  // Λίστα 06:00-14:00 (απόφαση 11/07/2026): μόνο οι εγκεκριμένοι
+  const elig62 = ctx.eligibility.get('06:00-14:00');
+  if (elig62 && elig62.size > 0) {
+    for (const a of work) {
+      if (a.start === '06:00' && a.end === '14:00' && !elig62.has(a.agentId)) {
+        const ag = agentById.get(a.agentId);
+        warn(`06:00-14:00: ο/η ${ag ? ag.name : a.agentId} ΔΕΝ είναι στη λίστα επιλεξιμότητας της βάρδιας`, a.date);
+      }
+    }
+  }
+
+  const elig1903 = ctx.eligibility.get('19:00-03:00') || new Map();
   const usage1903 = new Map();
   for (const a of work) {
     if (a.start !== '19:00' || a.end !== '03:00') continue;
     const ag = agentById.get(a.agentId);
-    const el = ctx.eligibility.get(a.agentId);
+    const el = elig1903.get(a.agentId);
     if (!el) {
       warn(`Κ9: ${ag ? ag.name : a.agentId} πήρε 19:00-03:00 χωρίς να είναι στη λίστα`, a.date);
       continue;
@@ -211,7 +226,7 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
     const telework = a.location === 'home' || (a.label || '').includes('ΤΗΛΕΡΓΑΣΙΑ');
     // Το σπαστό ελέγχεται ως ζεύγος — μεμονωμένα parts εξαιρούνται
     if (rule(ag, 'split_shift')) continue;
-    if (!shiftAllowedByRules(ag, d, a.start, a.end, { override1903: is1903, telework })) {
+    if (!shiftAllowedByRules(ag, d, a.start, a.end, { override1903: is1903, telework, date: a.date })) {
       warn(`Κανόνας agent: ${ag.name} δεν επιτρέπεται να δουλέψει ${a.start}-${a.end} (${['Δευ', 'Τρι', 'Τετ', 'Πεμ', 'Παρ', 'Σαβ', 'Κυρ'][d]})`, a.date);
     }
   }
@@ -234,6 +249,9 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
         if (def.skill && !ag.skills.has(def.skill)) continue;
 
         let match = a.start === def.start && a.end === def.end;
+        // Period-based απαιτήσεις (Πειραιώς/ΗΡΩΝ/Verification πρωί-απόγευμα)
+        if (!match && def.period === 'morning' && isMorning(a.start, a.end) && !isNightRow(a)) match = true;
+        if (!match && def.period === 'afternoon' && isAfternoon(a.start)) match = true;
         // Νυχτερινή: δεκτή και η εναλλακτική 23:30-07:30 (Κ4)
         if (!match && def.start === '23:00' && isNightRow(a)) match = true;
         // ΣΚ Supervisor απόγευμα: δεκτό το 16:00-24:00 της Αγγελούδη
@@ -249,7 +267,7 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
         for (let i = 0; i < dayRows.length && covered < def.headcount; i++) {
           if (used.has(i)) continue;
           const a = dayRows[i];
-          if (a.start === '19:00' && a.end === '03:00' && ctx.eligibility.has(a.agentId)) {
+          if (a.start === '19:00' && a.end === '03:00' && elig1903.has(a.agentId)) {
             used.add(i);
             covered++;
           }
@@ -304,6 +322,24 @@ async function computeStateFromAssignments(weekStart, assignments, prevState) {
 
     let count1903 = prev.count1903;
     for (const r of rows) if (r.start === '19:00' && r.end === '03:00') count1903++;
+    let count62 = prev.count62 || 0;
+    for (const r of rows) if (r.start === '06:00' && r.end === '14:00') count62++;
+
+    // Μετρητές Κυριακών ανά μήνα: δουλεμένες (όριο 2/μήνα) και ρεπό
+    // (sunday_worker: το πολύ 1 ρεπό Κυριακής/μήνα — 12/07/2026)
+    const sundays = { ...(prev.sundays || {}) };
+    const sundaysOff = { ...(prev.sundaysOff || {}) };
+    const sundayDate = addDays(weekStart, 6);
+    const mk = sundayDate.slice(0, 7);
+    if (rows.some((r) => r.date === sundayDate)) {
+      sundays[mk] = (sundays[mk] || 0) + 1;
+    } else {
+      const offRow = (assignments || []).find((x) => x.off && x.agentId === ag.id && x.date === sundayDate);
+      const isLeave = offRow && (offRow.reason === 'leave' || offRow.reason === 'sick');
+      if (!isLeave) sundaysOff[mk] = (sundaysOff[mk] || 0) + 1;
+    }
+    for (const k of Object.keys(sundays).sort().slice(0, -3)) delete sundays[k];
+    for (const k of Object.keys(sundaysOff).sort().slice(0, -3)) delete sundaysOff[k];
 
     let rizouMode = prev.rizouMode;
     if (rule(ag, 'weekly_alternation') && rows.length > 0) {
@@ -312,7 +348,7 @@ async function computeStateFromAssignments(weekStart, assignments, prevState) {
       rizouMode = mornings >= rows.length / 2 ? 'afternoon' : 'morning';
     }
 
-    state[ag.id] = { streak, lastEndAbs, nights, weekends: prev.weekends + wknd, count1903, rizouMode };
+    state[ag.id] = { streak, lastEndAbs, nights, weekends: prev.weekends + wknd, count1903, count62, sundays, sundaysOff, rizouMode };
   }
   return state;
 }

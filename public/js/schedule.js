@@ -540,6 +540,54 @@
     }
   });
 
+  // ---------- Εισαγωγή Excel υπάρχοντος προγράμματος ----------
+  // Διαβάζει το αρχείο εβδομάδας που έχει ήδη βγει (π.χ. την εβδομάδα ΠΡΙΝ
+  // την περίοδο) ώστε ο generator να τηρεί Κ8/Κ10 στα σύνορα.
+  $('importBtn').addEventListener('click', () => {
+    const def = period ? (() => {
+      const [y, m, d] = period.weeks[0].start.split('-').map(Number);
+      const dt = new Date(y, m - 1, d - 7, 12);
+      return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+    })() : '';
+    const ws = prompt('Δευτέρα της εβδομάδας του αρχείου (YYYY-MM-DD):', def);
+    if (!ws) return;
+    $('importFile').dataset.weekStart = ws.trim();
+    $('importFile').value = '';
+    $('importFile').click();
+  });
+
+  $('importFile').addEventListener('change', async () => {
+    const file = $('importFile').files[0];
+    if (!file) return;
+    const weekStart = $('importFile').dataset.weekStart;
+    const buf = await file.arrayBuffer();
+    let bin = '';
+    const bytes = new Uint8Array(buf);
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    }
+    const d = await api('/api/import/week', {
+      method: 'POST',
+      body: JSON.stringify({ weekStart, fileBase64: btoa(bin) })
+    });
+    if (!d.ok) return toast('Σφάλμα εισαγωγής: ' + d.error);
+    let msg = `Εισήχθησαν ${d.imported} βάρδιες για την εβδομάδα ${d.weekStart}`;
+    if (d.unmatchedNames.length) msg += ` — ΔΕΝ αναγνωρίστηκαν: ${d.unmatchedNames.slice(0, 5).join(', ')}`;
+    toast(msg);
+    // Αν η εβδομάδα είναι μέσα στην περίοδο, ξαναφόρτωσέ τη
+    const idx = weekData.findIndex((w) => w.weekStart === weekStart);
+    if (idx >= 0) {
+      const saved = await api('/api/schedule/week?start=' + weekStart);
+      if (saved.saved) {
+        weekData[idx].assignments = saved.assignments;
+        weekData[idx].saved = true;
+        weekData[idx].dirty = false;
+        if (idx === cur) renderWeek();
+        renderTabs();
+      }
+    }
+  });
+
   // ---------- Εκκίνηση ----------
   $('logoutBtn').addEventListener('click', async () => {
     await api('/api/logout', { method: 'POST' });
