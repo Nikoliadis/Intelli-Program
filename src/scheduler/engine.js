@@ -432,6 +432,23 @@ function phaseS1(w) {
     w.report.soft.push('Σ1: δεν βγήκε Παρασκευή 06:00-14:00 Πειραιώς για Νικολιάδη/Νικολιάδη Αλίκη.');
   }
 
+  // Δευτέρες: προτιμάται ο Νικολιάδης στο 06:00-14:00, όχι όμως κάθε
+  // Δευτέρα (13/07/2026) — τηλεργασία σε ΕΝΑΛΛΑΞ εβδομάδες
+  for (const a of pair) {
+    const r = rule(a, 'day_off_or_telework');
+    if (!r.days.includes(1) || r.days.includes(2)) continue; // μόνο όποιος έχει μέρα κανόνα τη Δευτέρα
+    const evenWeek = Math.floor(dayNum(w.weekStart) / 7) % 2 === 0;
+    const plan = w.plans.get(a.id);
+    if (evenWeek && canPlace(w, plan, 0, r.shift[0], r.shift[1], { telework: true })) {
+      const pir = ctx.roles.get('Πειραιώς') || { id: null, color: null };
+      place(w, plan, 0, {
+        start: r.shift[0], end: r.shift[1],
+        skill: 'ΠΕΙΡΑΙΩΣ', label: 'ΤΗΛΕΡΓΑΣΙΑ', location: 'home',
+        roleName: 'Πειραιώς', roleId: pir.id, color: pir.color
+      });
+    }
+  }
+
   // Οι υπόλοιπες «μέρες κανόνα» (Δευ/Τρι/Παρ) που δεν έγιναν τηλεργασία → ρεπό
   for (const a of pair) {
     const plan = w.plans.get(a.id);
@@ -492,13 +509,16 @@ function phaseNights(w, nightReqByDay) {
 function phaseOffs(w) {
   const { ctx } = w;
 
-  const eligibleFor = (agent, r) => {
+  const eligibleFor = (agent, r, d) => {
     if (!deptMatch(agent, r.department)) return false;
     if (r.skill && !agent.skills.has(r.skill)) return false;
     // Βάρδιες με λίστα επιλεξιμότητας (06:00-14:00, 19:00-03:00): μόνο τα
     // μέλη της μετράνε ως διαθέσιμο pool — αλλιώς τα ρεπό «καίνε» τη λίστα
     const list = ctx.eligibility.get(`${r.start}-${r.end}`);
     if (list && list.size > 0 && !list.has(agent.id)) return false;
+    // Οι ατομικοί κανόνες ωραρίου μετράνε: π.χ. οι «μόνο πρωί» ΔΕΝ είναι
+    // διαθέσιμο pool για το απογευματινό Πειραιώς (13/07/2026)
+    if (!shiftAllowedByRules(agent, d, r.start, r.end, { date: w.dates[d] })) return false;
     return true;
   };
 
@@ -510,11 +530,11 @@ function phaseOffs(w) {
     const reqs = ctx.requirements[dow >= 6 ? 'weekend' : 'weekday'];
     let risk = 0;
     for (const r of reqs) {
-      if (!eligibleFor(agent, r)) continue;
+      if (!eligibleFor(agent, r, d)) continue;
       // Διαθέσιμοι = επιλέξιμοι που ΔΕΝ έχουν ρεπό/άδεια τη μέρα d
       let avail = 0;
       for (const x of ctx.agents) {
-        if (!eligibleFor(x, r)) continue;
+        if (!eligibleFor(x, r, d)) continue;
         const e = w.plans.get(x.id).days[d];
         if (!e || e.type === 'work') avail++;
       }
@@ -580,6 +600,9 @@ function phaseOffs(w) {
         // Σ3: όποιος έχει δουλέψει πολλά ΣΚ, να ξεκουράζεται ΣΚ
         const wkndDays = opt.filter((d) => d >= 5).length;
         score += wkndDays * Math.min(st.weekends, 6) * 2;
+        // Τα ΣΚ έχουν ΜΟΝΟ τις απαιτήσεις του πίνακα (MAX — 13/07/2026):
+        // όσοι περισσεύουν, καλύτερα να ξεκουράζονται ΣΚ παρά καθημερινή
+        score += wkndDays * 4;
         // sunday_worker: απόφυγε γενικά τα ρεπό Κυριακής — δουλεύει Κυριακές
         if (opt.includes(6) && rule(a, 'sunday_worker')) score -= 25;
         for (const d of opt) {
@@ -707,6 +730,9 @@ function phaseRequirements(w, reqByDay) {
             score -= (st.count62 || 0) * 6;
             const std62 = rule(a, 'six_two_days');
             if (std62 && std62.days.length === 2 && std62.days[0] === 6) score -= 20;
+            // Δευτέρες: προτιμάται ο Νικολιάδης στο 06:00-14:00 — όχι όμως
+            // κάθε Δευτέρα (13/07/2026): μέτριο bonus, η εναλλαγή ισορροπεί
+            if (d === 0 && std62 && std62.days.includes(1)) score += 10;
           }
 
           cands.push({ a, score, shift });
@@ -831,13 +857,19 @@ function phaseFillers(w) {
   for (const a of ctx.agents) {
     const plan = w.plans.get(a.id);
 
-    for (let d = 0; d < 7 && assignedCount(plan) < workTarget(plan); d++) {
+    // ΣΚ: ΜΟΝΟ οι απαιτήσεις του πίνακα (MAX — απόφαση 13/07/2026), όχι
+    // επιπλέον συμπληρωματικές βάρδιες. Οι fillers μπαίνουν Δευ-Παρ.
+    for (let d = 0; d < 5 && assignedCount(plan) < workTarget(plan); d++) {
       if (plan.days[d]) continue;
 
       // Υποψήφιες βάρδιες με σειρά προτίμησης
       let shifts = [];
       if (a.fixedStart && !a.fixedDays) {
         shifts = [[a.fixedStart, a.fixedEnd]]; // π.χ. Σταθοπούλου 16:00-24:00
+      } else if (a.departments.includes('supervisor')) {
+        // Supervisors: η επιπλέον βάρδια πάει ΠΡΩΙ μαζί με τον πρωινό —
+        // απόγευμα μόνο ο ένας του slot 15:00-23:00 (13/07/2026)
+        shifts = [['07:00', '15:00'], ...FILLER_MORNING];
       } else {
         const alt = rule(a, 'weekly_alternation');
         const wantMorning =
