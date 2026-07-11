@@ -23,26 +23,58 @@ const HALF = 'FFFFC000';
 
 const min2t = (m) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 
-// Κανονικοποίηση ονόματος κελιού → agent
+// Κανονικοποίηση ονόματος κελιού → agent.
+// - Μεταγραφή ελληνικών→λατινικών ώστε π.χ. «ΑΛΙΓΙΑ» να πιάνει το «ALIGIA»
+// - Αναγνώριση από ΟΠΟΙΟΔΗΠΟΤΕ όνομα (π.χ. «ΖΗΣΗΣ» → ΤΣΙΚΡΙΚΗΣ ΖΗΣΗΣ)
+// - Σκέτο διφορούμενο επώνυμο (π.χ. «ΠΑΠΑΣΑΡΑΝΤΟΥ») ξεδιαλύνεται από το
+//   χρώμα του κελιού (μωβ = supervisor → Ματίνα)
+const GR2LAT = {
+  'Α': 'A', 'Β': 'V', 'Γ': 'G', 'Δ': 'D', 'Ε': 'E', 'Ζ': 'Z', 'Η': 'I', 'Θ': 'TH',
+  'Ι': 'I', 'Κ': 'K', 'Λ': 'L', 'Μ': 'M', 'Ν': 'N', 'Ξ': 'X', 'Ο': 'O', 'Π': 'P',
+  'Ρ': 'R', 'Σ': 'S', 'Τ': 'T', 'Υ': 'Y', 'Φ': 'F', 'Χ': 'CH', 'Ψ': 'PS', 'Ω': 'O'
+};
+const translit = (s) => [...s].map((c) => GR2LAT[c] || c).join('');
+
 function buildNameMatcher(agents) {
   const norm = (s) => String(s).toUpperCase().replace(/\s+/g, ' ').trim();
-  return (cellVal) => {
+  const key = (s) => translit(norm(s));
+
+  return (cellVal, fill) => {
     const v = norm(cellVal);
     if (!v || v.length < 3) return null;
     const tokens = v.split(' ');
-    // Ακριβές πλήρες όνομα
-    let hit = agents.find((a) => norm(a.full_name) === v);
+    const kTokens = tokens.map(translit);
+
+    // 1. Ακριβές πλήρες όνομα (με μεταγραφή)
+    let hit = agents.find((a) => key(a.full_name) === key(v));
     if (hit) return hit;
-    // Επώνυμο (+ πρόθεμα ονόματος αν χρειάζεται)
-    const surnameMatches = agents.filter((a) => norm(a.full_name).split(' ')[0] === tokens[0]);
-    if (surnameMatches.length === 1) return surnameMatches[0];
-    if (surnameMatches.length > 1 && tokens[1]) {
-      hit = surnameMatches.find((a) => (norm(a.full_name).split(' ')[1] || '').startsWith(tokens[1]));
-      if (hit) return hit;
+
+    // 2. Πρώτο token = οποιοδήποτε όνομα του agent (επώνυμο Ή μικρό)
+    const tokenMatches = agents.filter((a) =>
+      norm(a.full_name).split(' ').some((t) => translit(t) === kTokens[0])
+    );
+    if (tokenMatches.length === 1) return tokenMatches[0];
+
+    if (tokenMatches.length > 1) {
+      // 3. Δεύτερο token του κελιού = πρόθεμα ονόματος
+      if (tokens[1]) {
+        hit = tokenMatches.find((a) =>
+          norm(a.full_name).split(' ').some((t) => translit(t).startsWith(kTokens[1]))
+        );
+        if (hit) return hit;
+      }
+      // 4. Χρώμα κελιού: μωβ supervisor → ο supervisor συνονόματος
+      if (fill === 'FFC792D6') {
+        hit = tokenMatches.find((a) => JSON.parse(a.departments || '[]').includes('supervisor'));
+        if (hit) return hit;
+      }
     }
     return null;
   };
 }
+
+// Κείμενα-ετικέτες που ΔΕΝ είναι ονόματα — δεν αναφέρονται ως «αγνώριστα»
+const LABEL_TEXTS = /INTERNATIONAL|ΓΡΑΦΕΙΟ|ΤΗΛΕΡΓΑΣΙΑ|VERIFICATION|CALL|ΝΥΧΤΕΡΙΝΗ|ΣΠΑΣΤΟ|ΑΝΟΙΓΜΑ|ΠΕΙΡΑΙΩΣ|ΗΡΩΝ|\/|--|->/i;
 
 // POST /api/import/week  body: {weekStart:'YYYY-MM-DD' (Δευτέρα), fileBase64}
 router.post('/week', async (req, res) => {
@@ -58,7 +90,7 @@ router.post('/week', async (req, res) => {
     const ws = wb.worksheets[0];
     if (!ws || ws.rowCount < 20) return res.status(400).json({ ok: false, error: 'Μη αναγνωρίσιμο φύλλο' });
 
-    const [agents] = await pool.query('SELECT id, full_name FROM agents WHERE active = 1');
+    const [agents] = await pool.query('SELECT id, full_name, departments FROM agents WHERE active = 1');
     const matchAgent = buildNameMatcher(agents);
 
     const maxCol = ws.columnCount;
@@ -108,8 +140,8 @@ router.post('/week', async (req, res) => {
         let run = null;
         for (let r = 2; r <= 26; r++) {
           const { v, fill } = r <= 25 ? cellInfo(r, c) : { v: '', fill: null };
-          const agent = v && !FILLER_COLORS.has(fill || '') ? matchAgent(v) : null;
-          if (v && !agent && r <= 25 && fill && !FILLER_COLORS.has(fill)) unmatched.add(v);
+          const agent = v && !FILLER_COLORS.has(fill || '') ? matchAgent(v, fill) : null;
+          if (v && !agent && r <= 25 && fill && !FILLER_COLORS.has(fill) && !LABEL_TEXTS.test(v)) unmatched.add(v);
 
           if (run && agent && agent.id === run.agent.id) {
             run.zTo = r - 2;

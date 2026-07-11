@@ -159,10 +159,13 @@ function k10ok(w, plan, d) {
   return back + 1 + fwd <= MAX_STREAK;
 }
 
-// Πόσες συνεχόμενες μέρες ΑΔΕΙΑΣ/ασθένειας ξεκινούν την ΕΠΟΜΕΝΗ Δευτέρα —
-// μετράνε ως εργάσιμες (13/07/2026), οπότε το 6ήμερο ελέγχεται ΚΑΙ μπροστά:
-// όποιος φεύγει με άδεια δεν πρέπει να «φορτωθεί» βάρδιες ακριβώς πριν.
+// Πόσες συνεχόμενες «εργάσιμες» μέρες ξεκινούν την ΕΠΟΜΕΝΗ Δευτέρα —
+// άδεια/ασθένεια (μετράνε ως εργάσιμες, 13/07/2026) και, όταν η επόμενη
+// εβδομάδα είναι ΕΙΣΗΓΜΕΝΗ από Excel (γνωστό πρόγραμμα), και οι βάρδιές της.
+// Έτσι το 6ήμερο ελέγχεται ΚΑΙ προς τα εμπρός στο σύνορο.
 function leadingLeaveNextWeek(w, agentId) {
+  // Η επόμενη εβδομάδα είναι γνωστή (εισηγμένη): προϋπολογισμένο στο generatePeriod
+  if (w.nextLead) return w.nextLead.get(agentId) || 0;
   let n = 0;
   for (let j = 7; j < 14; j++) {
     const t = w.ctx.timeOff.get(`${agentId}|${addDays(w.weekStart, j)}`);
@@ -1116,8 +1119,11 @@ function exportAssignments(w) {
 }
 
 // ==================== ΚΥΡΙΑ ΣΥΝΑΡΤΗΣΗ ΕΒΔΟΜΑΔΑΣ ====================
-function generateWeek(ctx, weekStart, state) {
+function generateWeek(ctx, weekStart, state, opts = {}) {
   const w = newWeek(ctx, weekStart, state);
+  // Συνεχόμενες μέρες στην αρχή της ΕΠΟΜΕΝΗΣ εβδομάδας όταν είναι γνωστή
+  // (εισηγμένη από Excel) — για τον εμπρόσθιο έλεγχο Κ10
+  w.nextLead = opts.nextLead || null;
 
   // Απαιτήσεις ανά μέρα με μετρητή κάλυψης
   const reqByDay = [];

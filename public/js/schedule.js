@@ -114,7 +114,9 @@
     const w = weekData[cur];
     $('statusInfo').textContent = w.assignments.length === 0
       ? 'Κενή εβδομάδα — πάτα «Δημιουργία Προγράμματος»'
-      : (w.dirty ? 'Μη αποθηκευμένες αλλαγές' : (w.saved ? 'Αποθηκευμένη' : 'Παράχθηκε — δεν έχει αποθηκευτεί'));
+      : (w.report && w.report.imported
+        ? 'Εισηγμένη από Excel — κρατείται ως έχει'
+        : (w.dirty ? 'Μη αποθηκευμένες αλλαγές' : (w.saved ? 'Αποθηκευμένη' : 'Παράχθηκε — δεν έχει αποθηκευτεί')));
   }
 
   $('prevWeekBtn').addEventListener('click', () => { if (cur > 0) { cur--; renderTabs(); renderWeek(); } });
@@ -446,8 +448,11 @@
         if (weekData[i]) {
           weekData[i].assignments = gw.assignments;
           weekData[i].report = gw.report;
-          weekData[i].dirty = true;
-          weekData[i].saved = false;
+          // Εισηγμένη από Excel εβδομάδα: κρατήθηκε ως έχει — είναι ήδη
+          // αποθηκευμένη, δεν χρειάζεται ξανά αποθήκευση
+          const imported = gw.report && gw.report.imported;
+          weekData[i].dirty = !imported;
+          weekData[i].saved = !!imported;
         }
       });
       toast('Το πρόγραμμα δημιουργήθηκε — δες τις εβδομάδες και αποθήκευσε');
@@ -482,9 +487,10 @@
 
   $('saveAllBtn').addEventListener('click', async () => {
     try {
-      // Με τη σειρά, ώστε η κατάσταση κάθε εβδομάδας να χτίζει στη σωστή προηγούμενη
+      // Με τη σειρά, ώστε η κατάσταση κάθε εβδομάδας να χτίζει στη σωστή
+      // προηγούμενη — οι ήδη αποθηκευμένες/εισηγμένες χωρίς αλλαγές παραλείπονται
       for (let i = 0; i < weekData.length; i++) {
-        if (weekData[i].assignments.length) await saveWeek(i);
+        if (weekData[i].assignments.length && (weekData[i].dirty || !weekData[i].saved)) await saveWeek(i);
       }
       toast('Όλη η περίοδος αποθηκεύτηκε');
       renderTabs();
