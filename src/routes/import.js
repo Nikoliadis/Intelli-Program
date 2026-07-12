@@ -69,6 +69,25 @@ function buildNameMatcher(agents) {
         if (hit) return hit;
       }
     }
+
+    // Τυπογραφικά λάθη στο χειροκίνητο αρχείο (π.χ. «ΚΟΚΟΠΠΟΥΛΟΥ» αντί
+    // «ΚΟΚΙΟΠΟΥΛΟΥ»): μοναδικό ταίριασμα επωνύμου με απόσταση ≤2 γραμμάτων
+    const dist = (s, t) => {
+      if (Math.abs(s.length - t.length) > 2) return 99;
+      const m = s.length, n = t.length;
+      let prev = Array.from({ length: n + 1 }, (_, j) => j);
+      for (let i = 1; i <= m; i++) {
+        const cur = [i];
+        for (let j = 1; j <= n; j++) {
+          cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (s[i - 1] === t[j - 1] ? 0 : 1));
+        }
+        prev = cur;
+      }
+      return prev[n];
+    };
+    const fuzzy = agents.filter((a) => dist(kTokens[0], translit(norm(a.full_name).split(' ')[0])) <= 2);
+    if (fuzzy.length === 1) return fuzzy[0];
+
     return null;
   };
 }
@@ -102,18 +121,30 @@ router.post('/week', async (req, res) => {
       return { v: v == null ? '' : String(v).trim(), fill };
     };
 
+    // ---- 0. Εντοπισμός γραμμής ζωνών: κάθε αρχείο μπορεί να έχει
+    // διαφορετικές κεφαλίδες (π.χ. το χειροκίνητο 20-26/7 έχει τις ζώνες
+    // μία γραμμή πιο κάτω). Βρες πού είναι το «00:00-01:00» στη στήλη A.
+    let zoneRow0 = 0;
+    for (let r = 1; r <= 6; r++) {
+      const { v } = cellInfo(r, 1);
+      if (/^00[.:]00\s*[-–]\s*0?1[.:]00/.test(v)) { zoneRow0 = r; break; }
+    }
+    if (!zoneRow0) {
+      return res.status(400).json({ ok: false, error: 'Δεν βρέθηκε η ζώνη «00:00-01:00» στη στήλη A — μη αναγνωρίσιμο format' });
+    }
+
     // ---- 1. Μπλοκ ημερών από την εναλλαγή χρώματος γεμίσματος των κενών ----
     const fillerOf = [];
     for (let c = 2; c <= maxCol; c++) {
       const counts = new Map();
-      for (let r = 2; r <= 25; r++) {
+      for (let r = zoneRow0; r <= zoneRow0 + 23; r++) {
         const { v, fill } = cellInfo(r, c);
         if (!v && fill && FILLER_COLORS.has(fill)) counts.set(fill, (counts.get(fill) || 0) + 1);
       }
       const top = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
       fillerOf.push(top ? top[0] : null);
     }
-    const blocks = []; // {c1, c2}
+    let blocks = []; // {c1, c2}
     for (let i = 0; i < fillerOf.length; i++) {
       const col = i + 2;
       if (!fillerOf[i]) {
@@ -124,6 +155,32 @@ router.post('/week', async (req, res) => {
       if (last && last.filler === fillerOf[i]) last.c2 = col;
       else blocks.push({ c1: col, c2: col, filler: fillerOf[i] });
     }
+    // Συγχώνευση «διαχωριστικών»: μονές/στενές στήλες με ουδέτερο γέμισμα
+    // (π.χ. FFF2F2F2 της κεφαλίδας) ΜΕΣΑ σε μέρα με ίδιο χρώμα δεξιά-αριστερά
+    for (let pass = 0; pass < 3; pass++) {
+      const merged = [];
+      for (const b of blocks) {
+        const prev = merged[merged.length - 1];
+        const width = b.c2 - b.c1 + 1;
+        if (prev && (b.filler === prev.filler || (width <= 2 && b.filler === 'FFF2F2F2'))) {
+          // ίδιο χρώμα ή στενό ουδέτερο διαχωριστικό: κόλλα στο προηγούμενο
+          prev.c2 = b.c2;
+          if (b.filler !== 'FFF2F2F2') prev.filler = prev.filler === 'FFF2F2F2' ? b.filler : prev.filler;
+        } else {
+          merged.push({ ...b });
+        }
+      }
+      // Δεύτερο μισό της συγχώνευσης: [Χρώμα Α][διαχωριστικό][Χρώμα Α] έγιναν
+      // ήδη ένα· ξαναπέρασε μέχρι να σταθεροποιηθεί
+      const again = [];
+      for (const b of merged) {
+        const prev = again[again.length - 1];
+        if (prev && prev.filler === b.filler) prev.c2 = b.c2;
+        else again.push(b);
+      }
+      blocks = again;
+      if (blocks.length === 7) break;
+    }
     if (blocks.length !== 7) {
       return res.status(400).json({
         ok: false,
@@ -132,26 +189,27 @@ router.post('/week', async (req, res) => {
     }
 
     // ---- 2. Σάρωση στηλών: συνεχόμενα «τρεξίματα» ίδιου ονόματος ----
-    // Ζώνη z = γραμμή r-2 (z=0 → 00:00-01:00 … z=23 → 23:00-24:00)
+    // Ζώνη z = γραμμή r - zoneRow0 (z=0 → 00:00-01:00 … z=23 → 23:00-24:00)
+    const lastZoneRow = zoneRow0 + 23;
     const rawRuns = []; // {dayIdx, agent, zFrom, zTo (inclusive), halfFirst, halfLast, color}
     const unmatched = new Set();
     for (let b = 0; b < 7; b++) {
       for (let c = blocks[b].c1; c <= blocks[b].c2; c++) {
         let run = null;
-        for (let r = 2; r <= 26; r++) {
-          const { v, fill } = r <= 25 ? cellInfo(r, c) : { v: '', fill: null };
+        for (let r = zoneRow0; r <= lastZoneRow + 1; r++) {
+          const { v, fill } = r <= lastZoneRow ? cellInfo(r, c) : { v: '', fill: null };
           const agent = v && !FILLER_COLORS.has(fill || '') ? matchAgent(v, fill) : null;
-          if (v && !agent && r <= 25 && fill && !FILLER_COLORS.has(fill) && !LABEL_TEXTS.test(v)) unmatched.add(v);
+          if (v && !agent && r <= lastZoneRow && fill && !FILLER_COLORS.has(fill) && !LABEL_TEXTS.test(v)) unmatched.add(v);
 
           if (run && agent && agent.id === run.agent.id) {
-            run.zTo = r - 2;
+            run.zTo = r - zoneRow0;
             run.halfLast = fill === HALF;
             if (fill && fill !== HALF && !run.color) run.color = fill;
           } else {
             if (run) rawRuns.push(run);
             run = agent
               ? {
-                  dayIdx: b, agent, zFrom: r - 2, zTo: r - 2,
+                  dayIdx: b, agent, zFrom: r - zoneRow0, zTo: r - zoneRow0,
                   halfFirst: fill === HALF, halfLast: fill === HALF,
                   color: fill && fill !== HALF ? fill : null
                 }
