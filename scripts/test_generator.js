@@ -433,6 +433,25 @@ function check(name, cond, detail) {
     }
     check('Βράδια: το πολύ 2/εβδομάδα ανά agent', !bad, bad);
 
+    // Τα 2 βράδια της εβδομάδας ΣΥΝΕΧΟΜΕΝΑ (14/07/2026)
+    let badPair = null;
+    for (const wk of result.weeks) {
+      const per = new Map();
+      for (const a of wk.assignments) {
+        if (a.off || !((a.start === '23:00' || a.start === '23:30') && toMin(a.end) < toMin(a.start))) continue;
+        if (!per.has(a.agentId)) per.set(a.agentId, []);
+        per.get(a.agentId).push(a.date);
+      }
+      for (const [id, ds] of per) {
+        if (ds.length === 2) {
+          ds.sort();
+          if (ds[1] !== addDays(ds[0], 1)) { badPair = `${nameOf[id]}: βράδια ${ds[0]} & ${ds[1]} μη συνεχόμενα`; break; }
+        }
+      }
+      if (badPair) break;
+    }
+    check('Βράδια: όταν είναι 2 την εβδομάδα, είναι ΣΥΝΕΧΟΜΕΝΑ (π.χ. Δευ+Τρι → ρεπό Τετ+Πεμ)', !badPair, badPair);
+
     // Ρεπό μετά το βράδυ (σε ΟΛΗ την περίοδο, με σύνορα): μετά από σειρά
     // Ν συνεχόμενων βραδιών → Ν μέρες χωρίς βάρδια
     const nightDates = new Map();

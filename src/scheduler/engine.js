@@ -530,17 +530,22 @@ function phaseNights(w, nightReqByDay) {
     const cands = pool
       .filter((a) => {
         const plan = w.plans.get(a.id);
-        if (nightsIn(plan) >= 2) return false; // έως 2 βράδια/εβδομάδα
-        // Δεύτερο σερί βράδυ επιτρέπεται, τρίτο ΟΧΙ
+        const n = nightsIn(plan);
+        if (n >= 2) return false; // έως 2 βράδια/εβδομάδα
+        // Το 2ο βράδυ ΜΟΝΟ ΣΥΝΕΧΟΜΕΝΟ με το 1ο (π.χ. Δευ+Τρι) — 14/07/2026
         const prevNight = d > 0 && plan.days[d - 1] && plan.days[d - 1].night;
-        const prevPrevNight = d > 1 && plan.days[d - 2] && plan.days[d - 2].night;
-        if (prevNight && prevPrevNight) return false;
+        if (n === 1 && !prevNight) return false;
         // Η ανάπαυση μετά το βράδυ πρέπει να χωράει: η επόμενη μέρα (αν είναι
         // μέσα στην εβδομάδα) να μην έχει ήδη βάρδια
         if (d + 1 < 7 && plan.days[d + 1] && plan.days[d + 1].type === 'work') return false;
         return canPlace(w, plan, d, '23:30', '07:30');
       })
       .sort((x, y) => {
+        // Προτίμησε να «κλείσει» ζευγάρι με τον χθεσινό νυχτερινό — αλλιώς
+        // η λίστα εξαντλείται σε σκόρπια μονά και μένουν μέρες ακάλυπτες
+        const pairX = d > 0 && w.plans.get(x.id).days[d - 1] && w.plans.get(x.id).days[d - 1].night ? 0 : 1;
+        const pairY = d > 0 && w.plans.get(y.id).days[d - 1] && w.plans.get(y.id).days[d - 1].night ? 0 : 1;
+        if (pairX !== pairY) return pairX - pairY;
         const lrX = rule(x, 'night_last_resort') ? 1 : 0;
         const lrY = rule(y, 'night_last_resort') ? 1 : 0;
         if (lrX !== lrY) return lrX - lrY;
@@ -661,11 +666,14 @@ function phaseOffs(w) {
     return n;
   }
 
-  // Λιγότερο ευέλικτοι πρώτοι (λίγες ελεύθερες μέρες)
+  // Λιγότερο ευέλικτοι πρώτοι: λίγες ελεύθερες μέρες, και μετά ΜΕΓΑΛΟ
+  // εισερχόμενο streak (το 5άρι σερί ΑΝΑΓΚΑΖΕΙ ρεπό Δευτέρα — πρέπει να
+  // το δουν πρώτοι ώστε οι υπόλοιποι να αποφύγουν την ίδια μέρα)
   const order = [...ctx.agents].sort((x, y) => {
     const fx = w.plans.get(x.id).days.filter((e) => !e).length;
     const fy = w.plans.get(y.id).days.filter((e) => !e).length;
-    return fx - fy;
+    if (fx !== fy) return fx - fy;
+    return (agentState(w, y.id).streak || 0) - (agentState(w, x.id).streak || 0);
   });
 
   for (const a of order) {

@@ -188,6 +188,10 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
       if (!ag) continue;
       if (dates.length > 2) warn(`Νυχτερινές: ${ag.name} έχει ${dates.length} βράδια την εβδομάδα (μέγιστο 2)`);
       dates.sort();
+      // Τα 2 βράδια της εβδομάδας πρέπει να είναι ΣΥΝΕΧΟΜΕΝΑ (14/07/2026)
+      if (dates.length === 2 && dates[1] !== addDays(dates[0], 1)) {
+        warn(`Νυχτερινές: ${ag.name} έχει 2 βράδια ΜΗ συνεχόμενα (${dates[0]} & ${dates[1]}) — πρέπει να είναι σερί`);
+      }
       // Σειρές συνεχόμενων βραδιών + υποχρεωτική ανάπαυση μετά
       let i = 0;
       while (i < dates.length) {
