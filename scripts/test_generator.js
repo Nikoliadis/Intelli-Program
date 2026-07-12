@@ -496,6 +496,53 @@ function check(name, cond, detail) {
     check(`Supervisors ΚΑΘΕ μέρα Δευ-Κυρ 07:00-15:00 & 16:00-24:00: πλήρης κάλυψη (${supM} πρωί / ${supA} απόγευμα)`, supUnc === 0 && supM >= 33 && supA >= 33, `unc=${supUnc} m=${supM} a=${supA}`);
   }
 
+  // ---------- 11. ΣΚ MAX = HARD (14/07/2026) ----------
+  {
+    // Ανά μέρα ΣΚ, ανά κατηγορία: μέγιστα 2 euro πρωί, 2 euro απόγ, 2 alpha
+    // πρωί, 2 alpha απόγ, 1 Πειραιώς 06:00, 1 Πειραιώς απόγ, 1 verif πρωί,
+    // 1 verif απόγ (+2 sup, 1×19:00, 1 νύχτα, καλοκαιρινά μοτίβα)
+    const CAPS = [
+      ['Eurobank πρωί', (x) => ['Eurobank', 'Eurobank (μόνο)'].includes(x.reqLabel) && x.start < '12:00', 2],
+      ['Eurobank απόγευμα', (x) => ['Eurobank', 'Eurobank (μόνο)'].includes(x.reqLabel) && x.start >= '12:00' && x.start < '19:00', 2],
+      ['Alpha πρωί', (x) => x.reqLabel === 'Alpha' && x.start < '12:00', 2],
+      ['Alpha απόγευμα', (x) => x.reqLabel === 'Alpha' && x.start >= '12:00', 2],
+      ['Πειραιώς 06:00', (x) => x.start === '06:00' && x.end === '14:00', 1],
+      ['Πειραιώς απόγευμα', (x) => x.reqLabel === 'Πειραιώς' && x.start >= '12:00', 1],
+      ['Verification πρωί', (x) => x.reqLabel === 'Verification' && x.start < '12:00', 1],
+      ['Supervisor', (x) => x.reqLabel === 'Supervisor', 2]
+    ];
+    let bad = null;
+    outerMax:
+    for (const wk of result.weeks) {
+      for (const date of [wk.dates[5], wk.dates[6]]) {
+        const day = wk.assignments.filter((a) => !a.off && a.date === date);
+        for (const [name, fn, cap] of CAPS) {
+          const n = day.filter(fn).length;
+          if (n > cap) { bad = `${date}: ${name} = ${n} (max ${cap})`; break outerMax; }
+        }
+      }
+    }
+    check('ΣΚ MAX (hard): κανένα ΣΚ πάνω από τα μέγιστα ανά κατηγορία', !bad, bad);
+
+    // Και κανένας filler ΣΚ: όλες οι ΣΚ βάρδιες έχουν reqLabel ή είναι
+    // δηλωμένες σταθερές (καλοκαιρινά μοτίβα Τσιτσικωστών = εντολή προϊσταμένου)
+    const patternIds = new Set([idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ'], idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ']]);
+    let extra = null;
+    for (const wk of result.weeks) {
+      for (const date of [wk.dates[5], wk.dates[6]]) {
+        for (const a of wk.assignments) {
+          if (a.off || a.date !== date) continue;
+          if (patternIds.has(a.agentId)) continue; // σταθερό μοτίβο — δικαιολογημένο
+          const isNight = (a.start === '23:00' || a.start === '23:30') && toMin(a.end) < toMin(a.start);
+          if (!a.reqLabel && !isNight) { extra = `${date}: ${a.agentName} ${a.start}-${a.end} χωρίς απαίτηση`; break; }
+        }
+        if (extra) break;
+      }
+      if (extra) break;
+    }
+    check('ΣΚ MAX (hard): καμία βάρδια ΣΚ εκτός απαιτήσεων/σταθερών (κανένας filler)', !extra, extra);
+  }
+
   // ---------- Σύνοψη κάλυψης ----------
   {
     let totalUncovered = 0;
