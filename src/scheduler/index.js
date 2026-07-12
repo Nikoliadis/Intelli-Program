@@ -71,6 +71,7 @@ async function generatePeriod(weeks) {
     // τρέχουσα να μην τον φορτώσει μέχρι την Κυριακή και βγει 6ήμερο
     const nextImported = importedByStart.get(addDays(wk.start, 7));
     let nextLead = null;
+    let nextFirstStart = null;
     if (nextImported) {
       nextLead = new Map();
       const workSet = new Set(
@@ -86,9 +87,19 @@ async function generatePeriod(weeks) {
         }
         if (n > 0) nextLead.set(ag.id, n);
       }
+      // Κ8 προς τα εμπρός: η ΠΡΩΤΗ βάρδια κάθε agent στην εισηγμένη επόμενη
+      // εβδομάδα — η τρέχουσα δεν πρέπει να τελειώνει <11h πριν από αυτήν
+      const { shiftAbs } = require('./time');
+      nextFirstStart = new Map();
+      for (const a of nextImported.assignments) {
+        if (a.off) continue;
+        const abs = shiftAbs(a.date, a.start, a.end);
+        const cur = nextFirstStart.get(a.agentId);
+        if (cur == null || abs.startAbs < cur) nextFirstStart.set(a.agentId, abs.startAbs);
+      }
     }
 
-    const res = generateWeek(ctx, wk.start, state, { nextLead });
+    const res = generateWeek(ctx, wk.start, state, { nextLead, nextFirstStart });
     state = res.nextState;
     out.push({
       weekStart: res.weekStart,

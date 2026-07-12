@@ -128,8 +128,14 @@ function k8ok(w, plan, d, start, end) {
     const abs = entryAbs(w, plan, i);
     if (abs) {
       if (abs.startAbs - endAbs < rest) return false;
-      break;
+      return true;
     }
+  }
+  // Καμία επόμενη μέσα στην εβδομάδα: αν η ΕΠΟΜΕΝΗ εβδομάδα είναι εισηγμένη
+  // (γνωστό πρόγραμμα), έλεγξε την πρώτη βάρδιά του εκεί (Κ8 σύνορο εμπρός)
+  if (w.nextFirstStart) {
+    const nfs = w.nextFirstStart.get(plan.agent.id);
+    if (nfs != null && nfs - endAbs < rest) return false;
   }
   return true;
 }
@@ -299,6 +305,23 @@ function agentDayWorkable(w, a, d) {
   return false;
 }
 
+// Θα «σκοτώσει» η τοποθέτηση (s,e) στη μέρα d κάποια ΓΕΙΤΟΝΙΚΗ κενή
+// καθημερινή του agent; Π.χ. 19:00-03:00 Τετάρτη + πρωινό Παρασκευής
+// αφήνουν την Πέμπτη χωρίς κανένα νόμιμο ωράριο (Κ8 από τις δύο μεριές) →
+// η μέρα χαραμίζεται σε αναγκαστικό 3ο ρεπό (HARD 2 ρεπό — 15/07/2026)
+function killsAdjacentDay(w, plan, d, s, e) {
+  for (const i of [d - 1, d + 1]) {
+    if (i < 0 || i > 4) continue; // τα ΣΚ δεν γεμίζουν με fillers έτσι κι αλλιώς
+    if (plan.days[i]) continue;
+    if (!agentDayWorkable(w, plan.agent, i)) continue; // ήδη νεκρή — αδιάφορο
+    plan.days[d] = { type: 'work', start: s, end: e, location: 'office' };
+    const stillOk = agentDayWorkable(w, plan.agent, i);
+    plan.days[d] = null;
+    if (!stillOk) return true;
+  }
+  return false;
+}
+
 // Πλήρης έλεγχος τοποθέτησης
 function canPlace(w, plan, d, start, end, opts = {}) {
   if (plan.days[d]) return false; // Κ2: 1 βάρδια/μέρα, όχι πάνω σε ρεπό/άδεια
@@ -422,12 +445,17 @@ function phaseLock(w) {
     }
 
     // Σπαστό ωράριο Κουλογιάννη: 09:00-24:00 με parts (μία «βάρδια» τη μέρα)
+    // — με σεβασμό στο Κ10 και στο σύνορο με εισηγμένο πρόγραμμα
     const sp = rule(a, 'split_shift');
     if (sp) {
       for (const dow of sp.days) {
         const d = dow - 1;
         if (plan.days[d]) continue;
         if (assignedCount(plan) >= workTarget(plan)) break;
+        if (!k10ok(w, plan, d)) {
+          w.report.soft.push(`${a.name}: σπαστό ${w.dates[d]} παραλείφθηκε — θα έσπαγε το 6ήμερο (Κ10).`);
+          continue;
+        }
         const c = fillerColor(ctx, a, d, sp.parts[0][0], sp.parts[1][1]);
         place(w, plan, d, {
           start: sp.parts[0][0], end: sp.parts[1][1],
@@ -658,8 +686,20 @@ function phaseNights(w, nightReqByDay) {
 // Φάση 4: κατανομή ρεπό (Σ2 συνεχόμενα, Σ3 εξισορρόπηση ΣΚ, Κ10 στα σύνορα).
 // Κρίσιμο: τα ρεπό πρέπει να μοιράζονται ώστε ΚΑΘΕ μέρα (ιδίως τα ΣΚ) να
 // μένουν αρκετοί διαθέσιμοι επιλέξιμοι για κάθε απαίτηση κάλυψης.
-function phaseOffs(w) {
+function phaseOffs(w, reqByDay) {
   const { ctx } = w;
+
+  // Υπάρχει ακόμα ανοιχτό 19:00-03:00 slot τη μέρα d που μπορεί να πάρει ο
+  // agent στο pass B; (τότε ΜΗΝ του κλειδώσεις τη μέρα ως ρεπό)
+  const open1903 = (a, d) => {
+    if (!reqByDay) return false;
+    const list = ctx.eligibility.get('19:00-03:00');
+    if (list && list.size > 0 && !list.has(a.id)) return false;
+    for (const rq of reqByDay[d]) {
+      if (rq.def.start === '19:00' && rq.covered < rq.def.headcount) return true;
+    }
+    return false;
+  };
 
   const eligibleFor = (agent, r, d) => {
     if (!deptMatch(agent, r.department)) return false;
@@ -735,7 +775,19 @@ function phaseOffs(w) {
   for (const a of order) {
     const plan = w.plans.get(a.id);
 
-    // Πρώτα, ΝΤΕΤΕΡΜΙΝΙΣΤΙΚΑ: μέρες που ο agent ΔΕΝ μπορεί να δουλέψει
+    // ΣΚ MAX (hard): οι θέσεις ΣΚ μοιράστηκαν ΗΔΗ (phaseRequirements [5,6])
+    // και οι fillers δεν αγγίζουν ΣΚ — άρα κάθε κενό Σάββατο/Κυριακή είναι
+    // ΑΝΑΠΟΦΕΥΚΤΟ ρεπό. Χρεώνεται ΠΡΩΤΟ στο budget, αλλιώς ο agent παίρνει
+    // και ρεπό καθημερινής και καταλήγει με 3 (HARD 2 ρεπό — 15/07/2026)
+    for (const d of [5, 6]) {
+      if (plan.offNeeded <= 0) break;
+      if (plan.days[d]) continue;
+      if (open1903(a, d)) continue; // ίσως πάρει 19:00-03:00 στο pass B
+      markOff(w, plan, d, 'repo');
+      plan.offNeeded--;
+    }
+
+    // Μετά, ΝΤΕΤΕΡΜΙΝΙΣΤΙΚΑ: μέρες που ο agent ΔΕΝ μπορεί να δουλέψει
     // (κανόνες/Κ8 από το σύνορο, π.χ. Δευτέρα πρωί μετά από Κυριακή 24:00
     // για «μόνο πρωί») γίνονται τα ρεπό του — αλλιώς χαραμίζονται και
     // καταλήγει με 3ο ρεπό (HARD 2 ρεπό — 15/07/2026)
@@ -783,7 +835,21 @@ function phaseOffs(w) {
         }
 
         let score = 0;
-        if (opt.length === 2) score += rule(a, 'consecutive_off_strong') ? 40 : 12; // Σ2
+        // Σ2 ΔΥΝΑΤΑ (15/07/2026): τα ρεπό ΜΑΖΙ για όλους — όχι σπαστά.
+        // Το bonus πρέπει να νικά το «οριακό» dayRisk (80) μιας μέρας μόνο
+        // στους consecutive_off_strong — στους υπόλοιπους νικά τα μέτρια.
+        if (opt.length === 2) score += rule(a, 'consecutive_off_strong') ? 90 : 55;
+        // Μονό ρεπό: προτίμησε να «κολλήσει» δίπλα σε υπάρχον ρεπό/αίτημα
+        // (π.χ. αίτημα Τετάρτη → το δεύτερο ρεπό Τρίτη ή Πέμπτη)
+        if (opt.length === 1) {
+          const d0 = opt[0];
+          const adj = [d0 - 1, d0 + 1].some((i) => {
+            if (i < 0 || i > 6) return false;
+            const e = plan.days[i];
+            return e && e.type === 'off';
+          });
+          if (adj) score += 35;
+        }
         // Σ3: όποιος έχει δουλέψει πολλά ΣΚ, να ξεκουράζεται ΣΚ
         const wkndDays = opt.filter((d) => d >= 5).length;
         score += wkndDays * Math.min(st.weekends, 6) * 2;
@@ -818,7 +884,7 @@ function phaseOffs(w) {
 }
 
 // Φάση 5: κάλυψη απαιτήσεων (Κ1) με scoring
-function phaseRequirements(w, reqByDay) {
+function phaseRequirements(w, reqByDay, opts = {}) {
   const { ctx } = w;
 
   // Ταιριάζει μια υπάρχουσα ανάθεση με την απαίτηση; (ακριβές ωράριο,
@@ -830,7 +896,7 @@ function phaseRequirements(w, reqByDay) {
     return false;
   }
 
-  for (let d = 0; d < 7; d++) {
+  for (const d of (opts.days || [0, 1, 2, 3, 4, 5, 6])) {
     for (const rq of reqByDay[d]) {
       if (rq.def.start === '23:00') continue; // νυχτερινή: καλύφθηκε στη φάση 3
       if (rq.def.start === '19:00') continue; // 19:00-03:00: φάση 6 (Κ9)
@@ -901,12 +967,23 @@ function phaseRequirements(w, reqByDay) {
               if (!plan.days[i] && agentDayWorkable(w, a, i)) wdFree++;
             }
             const needWknd = workTarget(plan) - assignedCount(plan) - wdFree;
-            if (needWknd > 0) score += needWknd * 25;
+            // Κυρίαρχο κριτήριο: χωρίς θέση ΣΚ αυτός βγαίνει ΜΑΘΗΜΑΤΙΚΑ με
+            // 3ο ρεπό (οι καθημερινές δεν του φτάνουν για 5 εργάσιμες)
+            if (needWknd > 0) score += needWknd * 60;
             // Όποιος ΔΕΝ χρειάζεται τη θέση ΣΚ (χωράει στις καθημερινές)
             // την αφήνει σε όποιον τη χρειάζεται — ΕΚΤΟΣ των supervisors:
             // οι δικές τους θέσεις ΣΚ καλύπτονται μόνο από αυτούς
-            else if (!a.departments.includes('supervisor')) score -= 8;
+            else if (!a.departments.includes('supervisor')) score -= 15;
+            // Ρεπό ΜΑΖΙ (15/07/2026): όποιος δουλεύει ήδη Σάββατο προτιμάται
+            // και την Κυριακή — το ΣΚ συγκεντρώνεται σε λιγότερα άτομα και
+            // οι υπόλοιποι παίρνουν το ζευγάρι Σαβ+Κυρ ως ρεπό
+            if (d === 6) {
+              const sat = plan.days[5];
+              if (sat && sat.type === 'work') score += 30;
+            }
           }
+          // Μην αχρηστεύεις γειτονική κενή καθημερινή (νεκρή μέρα = 3ο ρεπό)
+          if (killsAdjacentDay(w, plan, d, shS, shE)) score -= 45;
           // Νικολιάδης: δουλεύει Κυριακές — βολεύει (11/07/2026). Ισχυρό bonus:
           // με το «ΣΚ MAX» πρέπει να κερδίζει θέση Κυριακής, αλλιώς μένει
           // άθελά του με 2ο ρεπό Κυριακής τον μήνα
@@ -1079,9 +1156,10 @@ function phase1903(w, reqByDay, opts = {}) {
   }
 
   // Μετά από ΣΕΙΡΑ 2+ συνεχόμενων 19:00-03:00 → ΡΕΠΟ την επόμενη μέρα
-  // (15/07/2026). Τρέχει μόνο στο τελικό πέρασμα· αν η σειρά τελειώνει
+  // (15/07/2026). Τρέχει και στα ΔΥΟ περάσματα — αλλιώς οι απαιτήσεις που
+  // μεσολαβούν μπορούν να πιάσουν τη μέρα του ρεπό. Αν η σειρά τελειώνει
   // Κυριακή, το ρεπό οφείλεται στην επόμενη εβδομάδα (pendingNightRest).
-  if (!opts.skipNotAlone) {
+  {
     for (const [agentId] of (ctx.eligibility.get('19:00-03:00') || new Map())) {
       const plan = w.plans.get(agentId);
       if (!plan) continue;
@@ -1155,9 +1233,14 @@ function phaseFillers(w) {
         if (om && om.starts) shifts = FILLER_MORNING.filter(([s]) => om.starts.includes(s));
       }
 
-      for (const [s, e] of shifts) {
-        const telework = a.workLocation === 'home';
-        if (canPlace(w, plan, d, s, e, { telework })) {
+      // Πέρασμα 0: μόνο ωράρια που ΔΕΝ αχρηστεύουν γειτονική κενή μέρα
+      // (νεκρή μέρα = αναγκαστικό 3ο ρεπό). Πέρασμα 1: ό,τι επιτρέπεται.
+      outer:
+      for (const pass of [0, 1]) {
+        for (const [s, e] of shifts) {
+          const telework = a.workLocation === 'home';
+          if (!canPlace(w, plan, d, s, e, { telework })) continue;
+          if (pass === 0 && killsAdjacentDay(w, plan, d, s, e)) continue;
           const c = fillerColor(ctx, a, d, s, e);
           place(w, plan, d, {
             start: s, end: e,
@@ -1165,7 +1248,7 @@ function phaseFillers(w) {
             location: telework ? 'home' : 'office',
             filler: true, ...c
           });
-          break;
+          break outer;
         }
       }
     }
@@ -1384,6 +1467,8 @@ function generateWeek(ctx, weekStart, state, opts = {}) {
   // Συνεχόμενες μέρες στην αρχή της ΕΠΟΜΕΝΗΣ εβδομάδας όταν είναι γνωστή
   // (εισηγμένη από Excel) — για τον εμπρόσθιο έλεγχο Κ10
   w.nextLead = opts.nextLead || null;
+  // Πρώτη έναρξη κάθε agent στην εισηγμένη επόμενη εβδομάδα — εμπρόσθιο Κ8
+  w.nextFirstStart = opts.nextFirstStart || null;
 
   // Απαιτήσεις ανά μέρα με μετρητή κάλυψης
   const reqByDay = [];
@@ -1397,9 +1482,13 @@ function generateWeek(ctx, weekStart, state, opts = {}) {
   phaseLock(w);          // Κ5, Κ6, σταθερά ρεπό
   phaseS1(w);            // Σ1 + κανόνες σχολής (Κ3)
   phaseNights(w, nightReqByDay); // Κ4, Κ7, Σ3 + υποχρεωτική ανάπαυση
-  phaseOffs(w);          // ρεπό: Σ2, Σ3, Κ10
-  phase1903(w, reqByDay, { skipNotAlone: true }); // Κ9 pass A: κράτηση θέσης
-  phaseRequirements(w, reqByDay); // Κ1 με scoring
+  phase1903(w, reqByDay, { skipNotAlone: true }); // Κ9 pass A: κράτηση θέσης ΠΡΩΤΑ
+  // ΣΚ MIN (15/07/2026): οι θέσεις του Σαββατοκύριακου γεμίζουν ΠΡΙΝ τα
+  // ρεπό — εξασφαλισμένη κάλυψη, οι «αναγκεμένοι» (με υποχρεωτικά ρεπό
+  // καθημερινής) παίρνουν τις θέσεις, και οι υπόλοιποι καθαρά Σαβ+Κυρ ρεπό
+  phaseRequirements(w, reqByDay, { days: [5, 6] });
+  phaseOffs(w, reqByDay); // ρεπό: Σ2, Σ3, Κ10
+  phaseRequirements(w, reqByDay, { days: [0, 1, 2, 3, 4] }); // Κ1 καθημερινές
   phase1903(w, reqByDay); // Κ9 pass B (και Αγγελή, με γνωστή παρουσία)
   phaseFillers(w);       // Κ2: όλοι στις 5 εργάσιμες
   phaseK4(w);            // οριστικοποίηση 23:00/23:30

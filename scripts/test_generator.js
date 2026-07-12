@@ -41,7 +41,7 @@ function check(name, cond, detail) {
   const eligMax = Object.fromEntries(eligRows.map((e) => [e.agent_id, e.max_per_week]));
 
   // ---------- Εκτύπωση προγράμματος ----------
-  for (const wk of result.weeks) {
+  for (const wk of [...result.weeks]) {
     console.log(`\n──────── Εβδομάδα ${wk.weekStart} ────────`);
     const byAgent = new Map();
     for (const a of wk.assignments) {
@@ -65,13 +65,27 @@ function check(name, cond, detail) {
     }
   }
 
-  // ---------- Συγκέντρωση όλων των αναθέσεων της περιόδου ----------
-  const workRows = [];
+  // ---------- Συγκέντρωση αναθέσεων ----------
+  // Οι ΕΙΣΗΓΜΕΝΕΣ από Excel εβδομάδες είναι εξωτερική πραγματικότητα
+  // (κρατιούνται ως έχουν) — ΔΕΝ ελέγχονται ως προϊόν του generator, αλλά
+  // μετράνε στα ΣΥΝΟΡΑ (Κ8/Κ10 προς τις παραγόμενες εβδομάδες).
+  const genWeeks = result.weeks.filter((w) => !(w.report && w.report.imported));
+  const genDates = new Set(genWeeks.flatMap((w) => w.dates));
+  if (genWeeks.length < result.weeks.length) {
+    console.log(`\n(${result.weeks.length - genWeeks.length} εβδομάδες εισηγμένες από Excel — ελέγχονται μόνο ως σύνορα)`);
+  }
+  const workRows = []; // ΜΟΝΟ παραγόμενες εβδομάδες
   const offRows = [];
-  for (const wk of result.weeks) {
+  const allWorkRows = []; // όλες (για ελέγχους συνόρων)
+  for (const wk of [...result.weeks]) {
+    const imported = wk.report && wk.report.imported;
     for (const a of wk.assignments) {
-      if (a.off) offRows.push(a);
-      else workRows.push(a);
+      if (a.off) {
+        if (!imported) offRows.push(a);
+      } else {
+        allWorkRows.push(a);
+        if (!imported) workRows.push(a);
+      }
     }
   }
 
@@ -81,8 +95,8 @@ function check(name, cond, detail) {
   // Εξαίρεση (11/07/2026): οι δύο Τσιτσικώστες δεν έχουν όριο 6ημέρου
   {
     const k10Exempt = new Set([idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ'], idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ']]);
-    const daysWorked = new Map(); // agentId → Set(dates)
-    for (const a of workRows) {
+    const daysWorked = new Map(); // agentId → Set(dates) — ΟΛΕΣ οι εβδομάδες (σύνορα)
+    for (const a of allWorkRows) {
       if (k10Exempt.has(a.agentId)) continue;
       if (!daysWorked.has(a.agentId)) daysWorked.set(a.agentId, new Set());
       daysWorked.get(a.agentId).add(a.date);
@@ -94,6 +108,8 @@ function check(name, cond, detail) {
       if (!daysWorked.has(a.agentId)) daysWorked.set(a.agentId, new Set());
       daysWorked.get(a.agentId).add(a.date);
     }
+    // Παράβαση μόνο αν η σειρά αγγίζει ΠΑΡΑΓΟΜΕΝΗ εβδομάδα — σειρές εξ
+    // ολοκλήρου μέσα σε εισηγμένο πρόγραμμα είναι εξωτερική πραγματικότητα
     let bad = null;
     for (const [id, dates] of daysWorked) {
       const sorted = [...dates].sort();
@@ -103,7 +119,13 @@ function check(name, cond, detail) {
         const cur = new Date(sorted[i] + 'T12:00:00');
         if ((cur - prev) / 86400000 === 1) {
           run++;
-          if (run > 5) { bad = `${nameOf[id]}: 6+ συνεχόμενες μέρες έως ${sorted[i]}`; break; }
+          if (run > 5) {
+            const runDates = sorted.slice(i - run + 1, i + 1);
+            if (runDates.some((dd) => genDates.has(dd))) {
+              bad = `${nameOf[id]}: 6+ συνεχόμενες μέρες έως ${sorted[i]}`;
+              break;
+            }
+          }
         } else {
           run = 1;
         }
@@ -116,9 +138,10 @@ function check(name, cond, detail) {
   // ---------- 2. Κ8: 11ωρο παντού (σύνορα εβδομάδων συμπεριλαμβάνονται) ----------
   {
     const koulId = idOf['ΚΟΥΛΟΓΙΑΝΝΗΣ ΚΥΡΙΑΚΟΣ'];
-    // Ενοποίηση σπαστών (ίδιος agent, ίδια μέρα) σε ένα διάστημα
+    // Ενοποίηση σπαστών (ίδιος agent, ίδια μέρα) σε ένα διάστημα — ΟΛΕΣ οι
+    // εβδομάδες, αλλά παράβαση μόνο όταν αγγίζει ΠΑΡΑΓΟΜΕΝΗ μέρα
     const merged = new Map(); // agentId|date → {startAbs, endAbs}
-    for (const a of workRows) {
+    for (const a of allWorkRows) {
       const abs = shiftAbs(a.date, a.start, a.end);
       const key = `${a.agentId}|${a.date}`;
       const cur = merged.get(key);
@@ -126,7 +149,7 @@ function check(name, cond, detail) {
         cur.startAbs = Math.min(cur.startAbs, abs.startAbs);
         cur.endAbs = Math.max(cur.endAbs, abs.endAbs);
       } else {
-        merged.set(key, { agentId: a.agentId, ...abs });
+        merged.set(key, { agentId: a.agentId, date: a.date, ...abs });
       }
     }
     const byAgent = new Map();
@@ -141,8 +164,8 @@ function check(name, cond, detail) {
       const minRest = id === koulId ? 9 * 60 : 11 * 60;
       for (let i = 1; i < list.length; i++) {
         const gap = list[i].startAbs - list[i - 1].endAbs;
-        if (gap < minRest) {
-          bad = `${nameOf[id]}: ανάπαυση ${(gap / 60).toFixed(1)}h`;
+        if (gap < minRest && (genDates.has(list[i].date) || genDates.has(list[i - 1].date))) {
+          bad = `${nameOf[id]}: ανάπαυση ${(gap / 60).toFixed(1)}h (${list[i - 1].date} → ${list[i].date})`;
           break;
         }
         if (id === koulId && gap < 11 * 60) koulNote = true;
@@ -156,7 +179,7 @@ function check(name, cond, detail) {
   // ---------- 3. Κ2: ≤5 εργάσιμες & ≥2 ρεπό ανά εβδομάδα για όλους ----------
   {
     let bad = null;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       const workDays = new Map();
       const offDays = new Map();
       const leaveDays = new Map();
@@ -205,7 +228,7 @@ function check(name, cond, detail) {
     outer:
     for (const fc of fixedChecks) {
       const id = idOf[fc.name];
-      for (const wk of result.weeks) {
+      for (const wk of genWeeks) {
         for (const date of wk.dates) {
           if (!fc.days.includes(dayOfWeek(date))) continue;
           const rows = workIdx.get(`${id}|${date}`) || [];
@@ -221,7 +244,7 @@ function check(name, cond, detail) {
     // ρεπό-προστασίας Κ10 δικαιολογούνται
     const aggId = idOf['ΑΓΓΕΛΟΥΔΗ ΜΑΡΙΑ'];
     let aggBad = null;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const date of wk.dates) {
         const dow = dayOfWeek(date);
         if (dow <= 2 && !offIdx.has(`${aggId}|${date}`)) aggBad = `${date}: δεν έχει ρεπό (Δευ/Τρι)`;
@@ -246,7 +269,7 @@ function check(name, cond, detail) {
     for (const [name, pattern] of Object.entries(PATTERNS)) {
       const id = idOf[name];
       let pBad = null;
-      for (const wk of result.weeks) {
+      for (const wk of genWeeks) {
         for (const date of wk.dates) {
           const dow = dayOfWeek(date);
           const want = pattern[dow];
@@ -267,7 +290,7 @@ function check(name, cond, detail) {
     // Κουλογιάννης: σπαστό 09-14 + 21-24 καθημερινές, ΣΚ ρεπό
     const koulId = idOf['ΚΟΥΛΟΓΙΑΝΝΗΣ ΚΥΡΙΑΚΟΣ'];
     let koulBad = null;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const date of wk.dates) {
         const dow = dayOfWeek(date);
         const rows = workIdx.get(`${koulId}|${date}`) || [];
@@ -304,7 +327,7 @@ function check(name, cond, detail) {
 
     let bad19 = null;
     const usage = new Map(); // week|agent → count
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const a of wk.assignments) {
         if (!a.off && a.start === '19:00' && a.end === '03:00') {
           if (eligMax[a.agentId] === undefined) { bad19 = `${nameOf[a.agentId]} εκτός λίστας πήρε 19:00-03:00 (${a.date})`; break; }
@@ -373,7 +396,7 @@ function check(name, cond, detail) {
 
     // Νικολιάδης: δουλεύει Κυριακές — το πολύ 1 ΡΕΠΟ Κυριακής/μήνα (12/07/2026)
     const nikSundaysOff = new Map(); // month → count
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       const sunday = wk.dates[6];
       const workedSunday = wk.assignments.some((a) => !a.off && a.agentId === nikId && a.date === sunday);
       // Άδεια/ασθένεια ΚΑΙ δικά του αιτήματα ρεπό δεν μετράνε στο όριο —
@@ -422,7 +445,7 @@ function check(name, cond, detail) {
     const { addDays } = require('../src/utils/dates');
     // ≤2 βράδια/εβδομάδα
     let bad = null;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       const per = new Map();
       for (const a of wk.assignments) {
         if (a.off || !((a.start === '23:00' || a.start === '23:30') && toMin(a.end) < toMin(a.start))) continue;
@@ -435,7 +458,7 @@ function check(name, cond, detail) {
 
     // Τα 2 βράδια της εβδομάδας ΣΥΝΕΧΟΜΕΝΑ (14/07/2026)
     let badPair = null;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       const per = new Map();
       for (const a of wk.assignments) {
         if (a.off || !((a.start === '23:00' || a.start === '23:30') && toMin(a.end) < toMin(a.start))) continue;
@@ -456,7 +479,7 @@ function check(name, cond, detail) {
     // Ν συνεχόμενων βραδιών → Ν μέρες χωρίς βάρδια
     const nightDates = new Map();
     const workDates = new Map();
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const a of wk.assignments) {
         if (a.off) continue;
         if (!workDates.has(a.agentId)) workDates.set(a.agentId, new Set());
@@ -499,7 +522,7 @@ function check(name, cond, detail) {
     let supUnc = 0;
     let supM = 0;
     let supA = 0;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const a of wk.assignments) {
         if (a.off) continue;
         if (a.start === '19:00' && a.end === '03:00') placed1903++;
@@ -511,11 +534,12 @@ function check(name, cond, detail) {
         if (u.label === 'Supervisor') supUnc++;
       }
     }
-    check(`19:00-03:00 κάθε μέρα Δευ-Κυρ: ${placed1903}/35 τοποθετημένες`, placed1903 + unc1903 === 35 && placed1903 >= 30, `placed=${placed1903} unc=${unc1903}`);
+    const genDays = 7 * genWeeks.length;
+    check(`19:00-03:00 κάθε μέρα Δευ-Κυρ: ${placed1903}/${genDays} τοποθετημένες`, placed1903 + unc1903 === genDays && placed1903 >= genDays - 5, `placed=${placed1903} unc=${unc1903}`);
     // Ανοχή 1: σε εβδομάδες με σωρευμένες άδειες supervisors μπορεί μία
     // θέση να είναι δομικά αδύνατη (Κ2/Κ10 - η άδεια μετρά ως εργάσιμη) —
     // εμφανίζεται στην αναφορά για χειροκίνητη απόφαση
-    check(`Supervisors ΚΑΘΕ μέρα Δευ-Κυρ 07:00-15:00 & 16:00-24:00 (${supM} πρωί / ${supA} απόγευμα, ακάλυπτα ${supUnc})`, supUnc <= 1 && supM >= 33 && supA >= 33, `unc=${supUnc} m=${supM} a=${supA}`);
+    check(`Supervisors ΚΑΘΕ μέρα Δευ-Κυρ 07:00-15:00 & 16:00-24:00 (${supM} πρωί / ${supA} απόγευμα, ακάλυπτα ${supUnc})`, supUnc <= 1 && supM >= genDays - 2 && supA >= genDays - 2, `unc=${supUnc} m=${supM} a=${supA}`);
   }
 
   // ---------- 10β. 19:00-03:00 ομαδοποίηση + ΣΚ International (15/07/2026) ----------
@@ -523,7 +547,7 @@ function check(name, cond, detail) {
     const { addDays } = require('../src/utils/dates');
     // Πολλαπλές 19:00-03:00/εβδομάδα: ΜΟΝΟ συνεχόμενες, και ρεπό μετά τη σειρά
     let bad = null;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       const per = new Map();
       for (const a of wk.assignments) {
         if (!a.off && a.start === '19:00' && a.end === '03:00') {
@@ -552,7 +576,7 @@ function check(name, cond, detail) {
     // ΣΚ International: 2 slots/μέρα ΣΚ (πρωί+απόγευμα) λογαριασμένα
     let intPlaced = 0;
     let intUnc = 0;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const date of [wk.dates[5], wk.dates[6]]) {
         intPlaced += wk.assignments.filter((a) => !a.off && a.date === date && a.reqLabel === 'International').length;
       }
@@ -561,7 +585,8 @@ function check(name, cond, detail) {
         if (dow >= 6 && u.label === 'International') intUnc++;
       }
     }
-    check(`ΣΚ International 1 πρωί + 1 απόγευμα: ${intPlaced}/20 τοποθετημένα`, intPlaced + intUnc === 20 && intPlaced >= 16, `placed=${intPlaced} unc=${intUnc}`);
+    const intTotal = 4 * genWeeks.length; // 2 slots × 2 μέρες ΣΚ ανά εβδομάδα
+    check(`ΣΚ International 1 πρωί + 1 απόγευμα: ${intPlaced}/${intTotal} τοποθετημένα`, intPlaced + intUnc === intTotal && intPlaced >= intTotal - 4, `placed=${intPlaced} unc=${intUnc}`);
   }
 
   // ---------- 11. ΣΚ MAX = HARD (14/07/2026) ----------
@@ -581,7 +606,7 @@ function check(name, cond, detail) {
     ];
     let bad = null;
     outerMax:
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const date of [wk.dates[5], wk.dates[6]]) {
         const day = wk.assignments.filter((a) => !a.off && a.date === date);
         for (const [name, fn, cap] of CAPS) {
@@ -596,7 +621,7 @@ function check(name, cond, detail) {
     // δηλωμένες σταθερές (καλοκαιρινά μοτίβα Τσιτσικωστών = εντολή προϊσταμένου)
     const patternIds = new Set([idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ'], idOf['ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ']]);
     let extra = null;
-    for (const wk of result.weeks) {
+    for (const wk of genWeeks) {
       for (const date of [wk.dates[5], wk.dates[6]]) {
         for (const a of wk.assignments) {
           if (a.off || a.date !== date) continue;
@@ -614,10 +639,10 @@ function check(name, cond, detail) {
   // ---------- Σύνοψη κάλυψης ----------
   {
     let totalUncovered = 0;
-    for (const wk of result.weeks) totalUncovered += wk.report.uncovered.length;
+    for (const wk of [...result.weeks]) totalUncovered += wk.report.uncovered.length;
     console.log(`\nΑκάλυπτες απαιτήσεις συνολικά: ${totalUncovered}`);
     const byLabel = new Map();
-    for (const wk of result.weeks) {
+    for (const wk of [...result.weeks]) {
       for (const u of wk.report.uncovered) {
         const k = `${u.start}-${u.end} ${u.label}`;
         byLabel.set(k, (byLabel.get(k) || 0) + 1);
