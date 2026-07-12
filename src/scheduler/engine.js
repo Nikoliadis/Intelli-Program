@@ -980,6 +980,7 @@ function phaseRequirements(w, reqByDay) {
 function phase1903(w, reqByDay, opts = {}) {
   const { ctx } = w;
   const verif = ctx.roles.get('Verification') || { id: null, color: null };
+  const is1903 = (e) => e && e.type === 'work' && e.start === '19:00' && e.end === '03:00';
 
   // Διαστήματα παρουσίας στο γραφείο για τη μέρα d στο [19:00, 03:00+]
   function officeCover(d, exceptAgentId) {
@@ -1031,6 +1032,13 @@ function phase1903(w, reqByDay, opts = {}) {
       if (plan.elig1903Used >= el.maxPerWeek) continue;
       // Pass A (πριν τις απαιτήσεις): οι «όχι μόνος» δεν αξιολογούνται ακόμα
       if (opts.skipNotAlone && el.notAlone) continue;
+      // Πάνω από 1 φορά/εβδομάδα ΜΟΝΟ ΣΥΝΕΧΟΜΕΝΑ (15/07/2026): η 2η+ 19:00-03:00
+      // μπαίνει μόνο αμέσως μετά την προηγούμενη (π.χ. Δευ+Τρι), και μετά
+      // τη σειρά ακολουθεί ρεπό — η επόμενη μέρα πρέπει να χωράει το ρεπό
+      if (plan.elig1903Used >= 1) {
+        if (!(d > 0 && is1903(plan.days[d - 1]))) continue;
+        if (d + 1 < 7 && plan.days[d + 1] && plan.days[d + 1].type === 'work') continue;
+      }
       // Κ9 υπερισχύει ατομικών περιορισμών ωραρίου — όχι όμως των Κ2/Κ6/Κ8/Κ10
       if (!canPlace(w, plan, d, '19:00', '03:00', { override1903: true })) continue;
       // Αγγελή: όχι μόνη στο γραφείο σε ΚΑΜΙΑ ώρα της βάρδιας
@@ -1040,6 +1048,8 @@ function phase1903(w, reqByDay, opts = {}) {
       }
       const st = agentState(w, a.id);
       let score = 100 - st.count1903 * 5 - plan.elig1903Used * 20;
+      // Προτίμησε να ΚΛΕΙΣΕΙ η σειρά με τον χθεσινό (ομαδοποίηση — 15/07/2026)
+      if (d > 0 && is1903(plan.days[d - 1])) score += 30;
       // Ρίζου: προτίμησέ την τις εβδομάδες απογεύματος
       if (rule(a, 'weekly_alternation') && st.rizouMode === 'morning') score -= 25;
       score += (workTarget(plan) - assignedCount(plan)) * 4;
@@ -1066,6 +1076,37 @@ function phase1903(w, reqByDay, opts = {}) {
     plan.elig1903Used++;
     agentState(w, a.id).count1903++;
     rq.covered++;
+  }
+
+  // Μετά από ΣΕΙΡΑ 2+ συνεχόμενων 19:00-03:00 → ΡΕΠΟ την επόμενη μέρα
+  // (15/07/2026). Τρέχει μόνο στο τελικό πέρασμα· αν η σειρά τελειώνει
+  // Κυριακή, το ρεπό οφείλεται στην επόμενη εβδομάδα (pendingNightRest).
+  if (!opts.skipNotAlone) {
+    for (const [agentId] of (ctx.eligibility.get('19:00-03:00') || new Map())) {
+      const plan = w.plans.get(agentId);
+      if (!plan) continue;
+      let d = 0;
+      while (d < 7) {
+        if (is1903(plan.days[d])) {
+          let len = 1;
+          while (d + len < 7 && is1903(plan.days[d + len])) len++;
+          if (len >= 2) {
+            const restDay = d + len;
+            if (restDay < 7) {
+              if (!plan.days[restDay]) {
+                markOff(w, plan, restDay, 'night_rest');
+                plan.offNeeded = Math.max(0, plan.offNeeded - 1);
+              }
+            } else {
+              plan.pendingNightRest = Math.max(plan.pendingNightRest || 0, 1);
+            }
+          }
+          d += len;
+        } else {
+          d++;
+        }
+      }
+    }
   }
 }
 

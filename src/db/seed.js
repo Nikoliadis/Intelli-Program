@@ -83,6 +83,8 @@ const REQUIREMENTS = {
     { start: '06:00', end: '14:00', skill: null, department: null, period: null, headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
     { start: '07:00', end: '15:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     { start: '07:30', end: '15:30', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank', color: 'Eurobank' },
+    // ΣΚ International: 1 πρωί + 1 απόγευμα (15/07/2026)
+    { start: '07:30', end: '15:30', skill: 'INTERNATIONAL', department: 'call', period: null, headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
     { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
     { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', period: null, headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
     { start: '08:00', end: '16:00', skill: null, department: 'verification', period: 'morning', headcount: 1, label: 'Verification', color: 'Verification' },
@@ -90,6 +92,8 @@ const REQUIREMENTS = {
     // βάρδια ΣΚ της Αγγελούδη
     { start: '16:00', end: '24:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank', color: 'Eurobank' },
+    // ΣΚ International: 1 πρωί + 1 απόγευμα (15/07/2026)
+    { start: '15:30', end: '23:30', skill: 'INTERNATIONAL', department: 'call', period: null, headcount: 1, label: 'International', color: 'Υπόλοιπα call' },
     { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
     { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', period: null, headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
     { start: '16:00', end: '24:00', skill: 'ΠΕΙΡΑΙΩΣ', department: null, period: 'afternoon', headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },

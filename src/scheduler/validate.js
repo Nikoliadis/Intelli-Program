@@ -234,6 +234,23 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
     if (usage1903.get(a.agentId) > el.maxPerWeek) {
       warn(`Κ9: ${ag.name} ξεπερνά το όριο ${el.maxPerWeek}/εβδομάδα για τη 19:00-03:00`, a.date);
     }
+    // Πολλαπλές 19:00-03:00 της εβδομάδας: ΜΟΝΟ συνεχόμενες + ρεπό μετά (15/07/2026)
+    {
+      const mine = work.filter((x) => x.agentId === a.agentId && x.start === '19:00' && x.end === '03:00')
+        .map((x) => x.date).sort();
+      if (mine.length >= 2 && mine[mine.length - 1] === a.date) {
+        for (let i = 1; i < mine.length; i++) {
+          if (mine[i] !== addDays(mine[i - 1], 1)) {
+            warn(`19:00-03:00: ${ag.name} τις έχει ΜΗ συνεχόμενες (${mine.join(', ')}) — πρέπει να είναι σερί`, a.date);
+            break;
+          }
+        }
+        const restDate = addDays(mine[mine.length - 1], 1);
+        if (work.some((x) => x.agentId === a.agentId && x.date === restDate)) {
+          warn(`19:00-03:00: ${ag.name} πρέπει να έχει ΡΕΠΟ μετά τη σειρά — δουλεύει ${restDate}`, restDate);
+        }
+      }
+    }
     // Αγγελή: όχι μόνη στο γραφείο 19:00-03:00
     if (el.notAlone && el.location === 'office') {
       const dayWork = work.filter((x) => x.date === a.date && x.agentId !== a.agentId && x.location !== 'home' && (x.label || '') !== 'ΤΗΛΕΡΓΑΣΙΑ');
@@ -392,6 +409,13 @@ async function computeStateFromAssignments(weekStart, assignments, prevState) {
         const lastNight = nightDates[nightDates.length - 1];
         const restBeyond = dayNum(lastNight) + len - dayNum(weekEnd); // πόσα ρεπό πέφτουν μετά την Κυριακή
         pendingNightRest = Math.max(0, Math.min(len, restBeyond));
+      }
+      // Σειρά 2+ συνεχόμενων 19:00-03:00 που κλείνει την Κυριακή → 1 ρεπό
+      // στην επόμενη εβδομάδα (15/07/2026)
+      const d1903 = rows.filter((r) => r.start === '19:00' && r.end === '03:00').map((r) => r.date).sort();
+      if (d1903.length >= 2 && d1903[d1903.length - 1] === weekEnd &&
+          d1903[d1903.length - 2] === addDays(weekEnd, -1)) {
+        pendingNightRest = Math.max(pendingNightRest, 1);
       }
     }
 

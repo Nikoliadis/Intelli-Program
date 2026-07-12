@@ -518,6 +518,52 @@ function check(name, cond, detail) {
     check(`Supervisors ΚΑΘΕ μέρα Δευ-Κυρ 07:00-15:00 & 16:00-24:00 (${supM} πρωί / ${supA} απόγευμα, ακάλυπτα ${supUnc})`, supUnc <= 1 && supM >= 33 && supA >= 33, `unc=${supUnc} m=${supM} a=${supA}`);
   }
 
+  // ---------- 10β. 19:00-03:00 ομαδοποίηση + ΣΚ International (15/07/2026) ----------
+  {
+    const { addDays } = require('../src/utils/dates');
+    // Πολλαπλές 19:00-03:00/εβδομάδα: ΜΟΝΟ συνεχόμενες, και ρεπό μετά τη σειρά
+    let bad = null;
+    for (const wk of result.weeks) {
+      const per = new Map();
+      for (const a of wk.assignments) {
+        if (!a.off && a.start === '19:00' && a.end === '03:00') {
+          if (!per.has(a.agentId)) per.set(a.agentId, []);
+          per.get(a.agentId).push(a.date);
+        }
+      }
+      for (const [id, ds] of per) {
+        if (ds.length < 2) continue;
+        ds.sort();
+        for (let i = 1; i < ds.length; i++) {
+          if (ds[i] !== addDays(ds[i - 1], 1)) { bad = `${nameOf[id]}: 19:00 μη συνεχόμενες ${ds.join(',')}`; break; }
+        }
+        if (bad) break;
+        const rest = addDays(ds[ds.length - 1], 1);
+        const lastPeriodDate = result.weeks[result.weeks.length - 1].dates[6];
+        if (rest <= lastPeriodDate) {
+          const worksRest = result.weeks.some((w2) => w2.assignments.some((a) => a.agentId === id && a.date === rest && !a.off));
+          if (worksRest) { bad = `${nameOf[id]}: δουλεύει ${rest} μετά από σειρά 19:00 (${ds.join(',')})`; break; }
+        }
+      }
+      if (bad) break;
+    }
+    check('19:00-03:00: πολλαπλές = ΣΥΝΕΧΟΜΕΝΕΣ + ρεπό μετά τη σειρά', !bad, bad);
+
+    // ΣΚ International: 2 slots/μέρα ΣΚ (πρωί+απόγευμα) λογαριασμένα
+    let intPlaced = 0;
+    let intUnc = 0;
+    for (const wk of result.weeks) {
+      for (const date of [wk.dates[5], wk.dates[6]]) {
+        intPlaced += wk.assignments.filter((a) => !a.off && a.date === date && a.reqLabel === 'International').length;
+      }
+      for (const u of wk.report.uncovered) {
+        const dow = dayOfWeek(u.date);
+        if (dow >= 6 && u.label === 'International') intUnc++;
+      }
+    }
+    check(`ΣΚ International 1 πρωί + 1 απόγευμα: ${intPlaced}/20 τοποθετημένα`, intPlaced + intUnc === 20 && intPlaced >= 16, `placed=${intPlaced} unc=${intUnc}`);
+  }
+
   // ---------- 11. ΣΚ MAX = HARD (14/07/2026) ----------
   {
     // Ανά μέρα ΣΚ, ανά κατηγορία: μέγιστα 2 euro πρωί, 2 euro απόγ, 2 alpha
