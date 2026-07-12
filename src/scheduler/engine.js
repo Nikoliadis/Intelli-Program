@@ -58,7 +58,7 @@ function newWeek(ctx, weekStart, state) {
 
 function agentState(w, agentId) {
   if (!w.state[agentId]) {
-    w.state[agentId] = { streak: 0, lastEndAbs: -Infinity, nights: 0, weekends: 0, count1903: 0, count62: 0, rizouMode: 'morning', sundays: {} };
+    w.state[agentId] = { streak: 0, lastEndAbs: -Infinity, nights: 0, weekends: 0, count1903: 0, count62: 0, rizouMode: 'morning', sundays: {}, pendingNightRest: 0 };
   }
   return w.state[agentId];
 }
@@ -336,6 +336,16 @@ function phaseLock(w) {
   for (const a of ctx.agents) {
     const plan = w.plans.get(a.id);
 
+    // Οφειλόμενη ανάπαυση από νυχτερινές στο ΤΕΛΟΣ της προηγούμενης εβδομάδας
+    // (π.χ. βράδυ Κυριακή → ρεπό Δευτέρα· 2 βράδια Σαβ+Κυρ → ρεπό Δευ+Τρι)
+    const st0 = agentState(w, a.id);
+    for (let i = 0; i < (st0.pendingNightRest || 0) && i < 7; i++) {
+      if (!plan.days[i]) {
+        markOff(w, plan, i, 'night_rest');
+        plan.offNeeded = Math.max(0, plan.offNeeded - 1);
+      }
+    }
+
     for (let d = 0; d < 7; d++) {
       const t = ctx.timeOff.get(`${a.id}|${w.dates[d]}`);
       if (t === 'leave' || t === 'sick') {
@@ -367,12 +377,18 @@ function phaseLock(w) {
     }
     plan.offNeeded = Math.max(0, plan.offNeeded);
 
-    // Σταθερά ωράρια σε σταθερές μέρες (Κ5)
+    // Σταθερά ωράρια σε σταθερές μέρες (Κ5) — με σεβασμό στο Κ10: αν η
+    // τοποθέτηση θα έφτιαχνε 6ήμερο (π.χ. μαζί με επερχόμενη ΑΔΕΙΑ που
+    // μετράει ως εργάσιμη), παραλείπεται με σημείωση
     if (a.fixedStart && a.fixedDays) {
       for (const dow of a.fixedDays) {
         const d = dow - 1;
         if (plan.days[d]) continue; // άδεια/ρεπό υπερισχύει (Κ6)
         if (assignedCount(plan) >= workTarget(plan)) break;
+        if (!k10ok(w, plan, d)) {
+          w.report.soft.push(`${a.name}: σταθερή βάρδια ${w.dates[d]} παραλείφθηκε — θα έσπαγε το 6ήμερο (Κ10, η άδεια μετρά ως εργάσιμη).`);
+          continue;
+        }
         const c = fillerColor(ctx, a, d, a.fixedStart, a.fixedEnd);
         place(w, plan, d, {
           start: a.fixedStart, end: a.fixedEnd,
@@ -397,12 +413,17 @@ function phaseLock(w) {
       }
     }
 
-    // Βάρδια ΣΚ Αγγελούδη (16:00-24:00) — Κ5
+    // Βάρδια ΣΚ Αγγελούδη (16:00-24:00) — Κ5, με σεβασμό στο Κ10 (η άδεια
+    // της επόμενης εβδομάδας μετράει ως εργάσιμη)
     if (a.weekendShift) {
       const [ws, we] = a.weekendShift.split('-');
       for (const d of [5, 6]) {
         if (plan.days[d]) continue;
         if (assignedCount(plan) >= workTarget(plan)) break;
+        if (!k10ok(w, plan, d)) {
+          w.report.soft.push(`${a.name}: βάρδια ΣΚ ${w.dates[d]} παραλείφθηκε — θα έσπαγε το 6ήμερο (Κ10, η άδεια μετρά ως εργάσιμη).`);
+          continue;
+        }
         const c = fillerColor(ctx, a, d, ws, we);
         place(w, plan, d, { start: ws, end: we, location: a.workLocation, fixed: true, ...c });
       }
@@ -493,18 +514,32 @@ function phaseS1(w) {
   }
 }
 
-// Φάση 3: Νυχτερινές 23:00/23:30 (Κ4, Κ7) — μόνο Νομικού + Μαυραγάνη
-// (απόφαση προϊσταμένου 09/07/2026), εναλλαγή με μετρητή Σ3.
+// Φάση 3: Νυχτερινές 23:00/23:30 (Κ4, Κ7) — κανόνες 14/07/2026:
+//   * κάθε agent έως 2 βράδια/εβδομάδα
+//   * μετά το βράδυ ΥΠΟΧΡΕΩΤΙΚΑ ρεπό (2 σερί βράδια → 2 σερί ρεπό)
+//   * η οφειλόμενη ανάπαυση που «ξεφεύγει» από την εβδομάδα μεταφέρεται
+//     στην επόμενη (pendingNightRest)
 function phaseNights(w, nightReqByDay) {
   const { ctx } = w;
   const pool = ctx.agents.filter((a) => a.canNight && a.skills.has('EUROBANK'));
   const euro = ctx.roles.get('Eurobank') || { id: null, color: null };
+  const nightsIn = (plan) => plan.days.filter((e) => e && e.type === 'work' && e.night).length;
 
   for (let d = 0; d < 7; d++) {
     if (!nightReqByDay[d]) continue;
-    // Προτίμηση: όχι night_last_resort, λιγότερες νύχτες ιστορικά (Σ3)
     const cands = pool
-      .filter((a) => canPlace(w, w.plans.get(a.id), d, '23:30', '07:30'))
+      .filter((a) => {
+        const plan = w.plans.get(a.id);
+        if (nightsIn(plan) >= 2) return false; // έως 2 βράδια/εβδομάδα
+        // Δεύτερο σερί βράδυ επιτρέπεται, τρίτο ΟΧΙ
+        const prevNight = d > 0 && plan.days[d - 1] && plan.days[d - 1].night;
+        const prevPrevNight = d > 1 && plan.days[d - 2] && plan.days[d - 2].night;
+        if (prevNight && prevPrevNight) return false;
+        // Η ανάπαυση μετά το βράδυ πρέπει να χωράει: η επόμενη μέρα (αν είναι
+        // μέσα στην εβδομάδα) να μην έχει ήδη βάρδια
+        if (d + 1 < 7 && plan.days[d + 1] && plan.days[d + 1].type === 'work') return false;
+        return canPlace(w, plan, d, '23:30', '07:30');
+      })
       .sort((x, y) => {
         const lrX = rule(x, 'night_last_resort') ? 1 : 0;
         const lrY = rule(y, 'night_last_resort') ? 1 : 0;
@@ -529,6 +564,37 @@ function phaseNights(w, nightReqByDay) {
     });
     nightReqByDay[d].covered++;
     agentState(w, a.id).nights++;
+  }
+
+  // Υποχρεωτική ανάπαυση μετά από κάθε «σειρά» βραδιών: όσα βράδια, τόσα
+  // συνεχόμενα ρεπό αμέσως μετά — ό,τι δεν χωράει στην εβδομάδα οφείλεται
+  // στην επόμενη (pendingNightRest)
+  for (const a of pool) {
+    const plan = w.plans.get(a.id);
+    plan.pendingNightRest = 0;
+    let d = 0;
+    while (d < 7) {
+      const e = plan.days[d];
+      if (e && e.type === 'work' && e.night) {
+        let len = 1;
+        while (d + len < 7 && plan.days[d + len] && plan.days[d + len].type === 'work' && plan.days[d + len].night) len++;
+        let owed = len;
+        let i = d + len;
+        while (owed > 0 && i < 7) {
+          if (!plan.days[i]) {
+            markOff(w, plan, i, 'night_rest');
+            plan.offNeeded = Math.max(0, plan.offNeeded - 1);
+          }
+          // Μέρα ήδη ρεπό/άδεια: μετράει ως ανάπαυση
+          owed--;
+          i++;
+        }
+        plan.pendingNightRest = owed; // μεταφέρεται στην επόμενη εβδομάδα
+        d = i;
+      } else {
+        d++;
+      }
+    }
   }
 }
 
@@ -557,19 +623,29 @@ function phaseOffs(w) {
   function dayRisk(agent, d) {
     const dow = d + 1;
     const reqs = ctx.requirements[dow >= 6 ? 'weekend' : 'weekday'];
-    let risk = 0;
+    // Ομαδοποίηση απαιτήσεων με το ΙΔΙΟ pool (τμήμα+skill): η ζήτηση
+    // ΑΘΡΟΙΖΕΤΑΙ — π.χ. 2 slots supervisors/μέρα σημαίνει ότι με 2
+    // διαθέσιμους supervisors ΚΑΝΕΙΣ τους δεν παίρνει ρεπό (14/07/2026)
+    const groups = new Map(); // key → {demand, avail}
     for (const r of reqs) {
       if (!eligibleFor(agent, r, d)) continue;
-      // Διαθέσιμοι = επιλέξιμοι που ΔΕΝ έχουν ρεπό/άδεια τη μέρα d
-      let avail = 0;
-      for (const x of ctx.agents) {
-        if (!eligibleFor(x, r, d)) continue;
-        const e = w.plans.get(x.id).days[d];
-        if (!e || e.type === 'work') avail++;
+      const key = `${r.department || ''}|${r.skill || ''}`;
+      if (!groups.has(key)) {
+        let avail = 0;
+        for (const x of ctx.agents) {
+          if (!eligibleFor(x, r, d)) continue;
+          const e = w.plans.get(x.id).days[d];
+          if (!e || e.type === 'work') avail++;
+        }
+        groups.set(key, { demand: 0, avail });
       }
-      const after = avail - 1;
-      if (after < r.headcount) risk += 200; // θα μείνει ακάλυπτο σχεδόν σίγουρα
-      else if (after < r.headcount + 2) risk += 40; // οριακό — απόφυγέ το
+      groups.get(key).demand += r.headcount;
+    }
+    let risk = 0;
+    for (const g of groups.values()) {
+      const after = g.avail - 1;
+      if (after < g.demand) risk += 200; // θα μείνει ακάλυπτο σχεδόν σίγουρα
+      else if (after < g.demand + 2) risk += 80; // οριακό — απόφυγέ το έντονα
       else risk += 6 / after;
     }
     return risk;
@@ -637,6 +713,9 @@ function phaseOffs(w) {
         // Τα ΣΚ έχουν ΜΟΝΟ τις απαιτήσεις του πίνακα (MAX — 13/07/2026):
         // όσοι περισσεύουν, καλύτερα να ξεκουράζονται ΣΚ παρά καθημερινή
         score += wkndDays * 4;
+        // Supervisors: τα ρεπό τους κατά προτίμηση ΣΚ — τις καθημερινές
+        // χρειάζονται και οι 2 βάρδιες τους (14/07/2026)
+        if (a.departments.includes('supervisor')) score += wkndDays * 10;
         // sunday_worker: απόφυγε γενικά τα ρεπό Κυριακής — δουλεύει Κυριακές
         if (opt.includes(6) && rule(a, 'sunday_worker')) score -= 25;
         for (const d of opt) {
@@ -668,9 +747,6 @@ function phaseRequirements(w, reqByDay) {
     if (e.start === def.start && e.end === def.end) return true;
     if (def.period === 'morning' && isMorning(e.start, e.end)) return true;
     if (def.period === 'afternoon' && isAfternoon(e.start)) return true;
-    // Αγγελούδη ΣΚ 16:00-24:00 μετράει ως απογευματινός Supervisor (09/07/2026)
-    if (d >= 5 && def.department === 'supervisor' && def.start === '15:00' &&
-        e.start === '16:00' && e.end === '24:00') return true;
     return false;
   }
 
@@ -800,8 +876,11 @@ function phaseRequirements(w, reqByDay) {
   }
 }
 
-// Φάση 6: βάρδια 19:00-03:00 (Κ9 — μόνο λίστα, όρια/εβδομάδα, Αγγελή όχι μόνη)
-function phase1903(w, reqByDay) {
+// Φάση 6: βάρδια 19:00-03:00 (Κ9 — μόνο λίστα, όρια/εβδομάδα, Αγγελή όχι μόνη).
+// Τρέχει σε ΔΥΟ περάσματα (14/07/2026): pass A ΠΡΙΝ τις υπόλοιπες απαιτήσεις
+// (χωρίς τους «όχι μόνος» — κρατά θέση πριν φαγωθεί η λίστα από τα call
+// slots), pass B μετά, όταν η παρουσία γραφείου είναι γνωστή για την Αγγελή.
+function phase1903(w, reqByDay, opts = {}) {
   const { ctx } = w;
   const verif = ctx.roles.get('Verification') || { id: null, color: null };
 
@@ -842,7 +921,7 @@ function phase1903(w, reqByDay) {
     return point >= to;
   }
 
-  for (let d = 0; d < 5; d++) { // μόνο καθημερινές
+  for (let d = 0; d < 7; d++) { // ΚΑΘΕ μέρα Δευ-Κυρ (14/07/2026)
     const rq = reqByDay[d].find((r) => r.def.start === '19:00');
     if (!rq || rq.covered >= rq.def.headcount) continue;
 
@@ -853,6 +932,8 @@ function phase1903(w, reqByDay) {
       if (!el) continue; // Κ9: ΜΟΝΟ από τη λίστα
       const plan = w.plans.get(a.id);
       if (plan.elig1903Used >= el.maxPerWeek) continue;
+      // Pass A (πριν τις απαιτήσεις): οι «όχι μόνος» δεν αξιολογούνται ακόμα
+      if (opts.skipNotAlone && el.notAlone) continue;
       // Κ9 υπερισχύει ατομικών περιορισμών ωραρίου — όχι όμως των Κ2/Κ6/Κ8/Κ10
       if (!canPlace(w, plan, d, '19:00', '03:00', { override1903: true })) continue;
       // Αγγελή: όχι μόνη στο γραφείο σε ΚΑΜΙΑ ώρα της βάρδιας
@@ -865,11 +946,16 @@ function phase1903(w, reqByDay) {
       // Ρίζου: προτίμησέ την τις εβδομάδες απογεύματος
       if (rule(a, 'weekly_alternation') && st.rizouMode === 'morning') score -= 25;
       score += (workTarget(plan) - assignedCount(plan)) * 4;
+      // Κυριακή: εναλλαγή ώστε κανείς να μην «καίει» το όριο 2 Κυριακών/μήνα
+      if (d === 6) score -= ((st.sundays || {})[w.dates[6].slice(0, 7)] || 0) * 15;
       cands.push({ a, el, score });
     }
 
     if (cands.length === 0) {
-      w.report.uncovered.push({ date: w.dates[d], start: '19:00', end: '03:00', label: rq.def.label });
+      // Στο pass A δεν αναφέρεται ακάλυπτο — θα ξαναδοκιμάσει το pass B
+      if (!opts.skipNotAlone) {
+        w.report.uncovered.push({ date: w.dates[d], start: '19:00', end: '03:00', label: rq.def.label });
+      }
       continue;
     }
     cands.sort((x, y) => y.score - x.score || x.a.id - y.a.id);
@@ -893,10 +979,16 @@ function phaseFillers(w) {
   for (const a of ctx.agents) {
     const plan = w.plans.get(a.id);
 
-    // ΣΚ: ΜΟΝΟ οι απαιτήσεις του πίνακα (MAX — απόφαση 13/07/2026), όχι
-    // επιπλέον συμπληρωματικές βάρδιες. Οι fillers μπαίνουν Δευ-Παρ.
-    for (let d = 0; d < 5 && assignedCount(plan) < workTarget(plan); d++) {
+    // ΣΚ MAX (13/07/2026): οι fillers μπαίνουν πρώτα Δευ-Παρ. Αν όμως δεν
+    // συμπληρώνονται οι 5 εργάσιμες (Κ2 — υπερισχύει, 14/07/2026: όχι
+    // παραπάνω από 2 ρεπό), επιτρέπεται βάρδια ΣΚ ως έσχατη λύση.
+    for (const d of [0, 1, 2, 3, 4, 5, 6]) {
+      if (assignedCount(plan) >= workTarget(plan)) break;
       if (plan.days[d]) continue;
+      // Supervisors: ΠΟΤΕ filler ΣΚ — το ΣΚ τους καλύπτεται απ' τις
+      // απαιτήσεις· δεύτερος 07:00 το Σάββατο σπαταλά μέρες και σέρνει
+      // streaks που μπλοκάρουν τις αρχές της επόμενης εβδομάδας (14/07/2026)
+      if (d >= 5 && a.departments.includes('supervisor')) continue;
 
       // Υποψήφιες βάρδιες με σειρά προτίμησης
       let shifts = [];
@@ -938,6 +1030,9 @@ function phaseFillers(w) {
             location: telework ? 'home' : 'office',
             filler: true, ...c
           });
+          if (d >= 5) {
+            w.report.soft.push(`${a.name}: βάρδια ΣΚ ${w.dates[d]} πέραν των απαιτήσεων — για συμπλήρωση 5 εργασίμων (όχι >2 ρεπό).`);
+          }
           break;
         }
       }
@@ -1077,6 +1172,7 @@ function computeNextState(w) {
       count62,
       sundays,
       sundaysOff,
+      pendingNightRest: plan.pendingNightRest || 0,
       rizouMode: rule(a, 'weekly_alternation')
         ? (assignedCount(plan) > 0 ? (st.rizouMode === 'morning' ? 'afternoon' : 'morning') : st.rizouMode)
         : st.rizouMode
@@ -1136,10 +1232,11 @@ function generateWeek(ctx, weekStart, state, opts = {}) {
 
   phaseLock(w);          // Κ5, Κ6, σταθερά ρεπό
   phaseS1(w);            // Σ1 + κανόνες σχολής (Κ3)
-  phaseNights(w, nightReqByDay); // Κ4, Κ7, Σ3
+  phaseNights(w, nightReqByDay); // Κ4, Κ7, Σ3 + υποχρεωτική ανάπαυση
   phaseOffs(w);          // ρεπό: Σ2, Σ3, Κ10
+  phase1903(w, reqByDay, { skipNotAlone: true }); // Κ9 pass A: κράτηση θέσης
   phaseRequirements(w, reqByDay); // Κ1 με scoring
-  phase1903(w, reqByDay); // Κ9
+  phase1903(w, reqByDay); // Κ9 pass B (και Αγγελή, με γνωστή παρουσία)
   phaseFillers(w);       // Κ2: όλοι στις 5 εργάσιμες
   phaseK4(w);            // οριστικοποίηση 23:00/23:30
   phasePairReport(w);    // Σ5 αναφορά

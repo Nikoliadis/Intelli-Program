@@ -217,7 +217,8 @@ function check(name, cond, detail) {
     }
     check('Κ5: σταθερά ωράρια (Κοκιοπούλου, Δημητρίου, Μπούκη, Πουλάκος, Πριμάλη, Πιπερίδη)', !bad, bad);
 
-    // Αγγελούδη: ρεπό Δευ+Τρι, ΣΚ 16:00-24:00
+    // Αγγελούδη: ρεπό Δευ+Τρι, ΣΚ 16:00-24:00 — μέρες με άδεια/αίτημα ή
+    // ρεπό-προστασίας Κ10 δικαιολογούνται
     const aggId = idOf['ΑΓΓΕΛΟΥΔΗ ΜΑΡΙΑ'];
     let aggBad = null;
     for (const wk of result.weeks) {
@@ -226,17 +227,22 @@ function check(name, cond, detail) {
         if (dow <= 2 && !offIdx.has(`${aggId}|${date}`)) aggBad = `${date}: δεν έχει ρεπό (Δευ/Τρι)`;
         if (dow >= 6) {
           const rows = workIdx.get(`${aggId}|${date}`) || [];
-          if (!rows.some((r) => r.start === '16:00' && r.end === '24:00')) aggBad = `${date}: λείπει ΣΚ 16:00-24:00`;
+          const ok = rows.some((r) => r.start === '16:00' && r.end === '24:00') || offIdx.has(`${aggId}|${date}`);
+          if (!ok) aggBad = `${date}: λείπει ΣΚ 16:00-24:00`;
         }
       }
     }
-    check('Κ5/constraints: Αγγελούδη — ρεπό Δευ+Τρι, ΣΚ 16:00-24:00', !aggBad, aggBad);
+    check('Κ5/constraints: Αγγελούδη — ρεπό Δευ+Τρι, ΣΚ 16:00-24:00 (με δικαιολογημένες απουσίες)', !aggBad, aggBad);
 
     // Καλοκαιρινά weekly_pattern Τσιτσικωστών (από 15/06 — 11/07/2026)
     const PATTERNS = {
       'ΤΣΙΤΣΙΚΩΣΤΑΣ ΑΛΕΞΑΝΔΡΟΣ': { 1: '18:00-24:00', 2: '13:00-21:00', 3: '18:00-24:00', 4: '13:00-21:00', 7: '16:00-24:00' },
       'ΤΣΙΤΣΙΚΩΣΤΑΣ ΛΕΩΝΙΔΑΣ': { 1: '20:00-24:00', 2: '20:00-24:00', 3: '18:00-22:00', 4: '15:00-23:00', 5: '18:00-22:00', 6: '15:00-23:00', 7: '16:00-24:00' }
     };
+    // Μέρες με ΑΔΕΙΑ/ασθένεια/αίτημα ρεπό (δεδομένα χρήστη) δικαιολογούνται
+    const excusedOff = new Set(
+      offRows.filter((o) => ['leave', 'sick', 'repo_request'].includes(o.reason)).map((o) => `${o.agentId}|${o.date}`)
+    );
     for (const [name, pattern] of Object.entries(PATTERNS)) {
       const id = idOf[name];
       let pBad = null;
@@ -246,7 +252,8 @@ function check(name, cond, detail) {
           const want = pattern[dow];
           const rows = workIdx.get(`${id}|${date}`) || [];
           if (want) {
-            if (!rows.some((r) => `${r.start}-${r.end}` === want)) { pBad = `${date}: αναμενόταν ${want}, βρέθηκε ${rows.map((r) => r.start + '-' + r.end).join(',') || 'ρεπό'}`; break; }
+            const ok = rows.some((r) => `${r.start}-${r.end}` === want) || excusedOff.has(`${id}|${date}`);
+            if (!ok) { pBad = `${date}: αναμενόταν ${want}, βρέθηκε ${rows.map((r) => r.start + '-' + r.end).join(',') || 'ρεπό'}`; break; }
           } else if (rows.length) {
             pBad = `${date}: δουλεύει ενώ το μοτίβο δίνει ρεπό`;
             break;
@@ -408,6 +415,85 @@ function check(name, cond, detail) {
       if (!days.includes(dow) && dow < 6) { bad2 = `${nameOf[a.agentId]} 06:00-14:00 ${a.date} (μέρα ${dow})`; break; }
     }
     check('Νικολιάδης 6-2 μόνο Δευ/Παρ, Νικολιάδη μόνο Τρι/Παρ (ΣΚ επιτρεπτό)', !bad2, bad2);
+  }
+
+  // ---------- 9. Κανόνες νυχτερινών (14/07/2026) ----------
+  {
+    const { addDays } = require('../src/utils/dates');
+    // ≤2 βράδια/εβδομάδα
+    let bad = null;
+    for (const wk of result.weeks) {
+      const per = new Map();
+      for (const a of wk.assignments) {
+        if (a.off || !((a.start === '23:00' || a.start === '23:30') && toMin(a.end) < toMin(a.start))) continue;
+        per.set(a.agentId, (per.get(a.agentId) || 0) + 1);
+      }
+      for (const [id, n] of per) if (n > 2) { bad = `${nameOf[id]}: ${n} βράδια εβδ. ${wk.weekStart}`; break; }
+      if (bad) break;
+    }
+    check('Βράδια: το πολύ 2/εβδομάδα ανά agent', !bad, bad);
+
+    // Ρεπό μετά το βράδυ (σε ΟΛΗ την περίοδο, με σύνορα): μετά από σειρά
+    // Ν συνεχόμενων βραδιών → Ν μέρες χωρίς βάρδια
+    const nightDates = new Map();
+    const workDates = new Map();
+    for (const wk of result.weeks) {
+      for (const a of wk.assignments) {
+        if (a.off) continue;
+        if (!workDates.has(a.agentId)) workDates.set(a.agentId, new Set());
+        workDates.get(a.agentId).add(a.date);
+        if ((a.start === '23:00' || a.start === '23:30') && toMin(a.end) < toMin(a.start)) {
+          if (!nightDates.has(a.agentId)) nightDates.set(a.agentId, []);
+          nightDates.get(a.agentId).push(a.date);
+        }
+      }
+    }
+    let badRest = null;
+    for (const [id, dates] of nightDates) {
+      dates.sort();
+      let i = 0;
+      while (i < dates.length) {
+        let len = 1;
+        while (i + len < dates.length && dates[i + len] === addDays(dates[i + len - 1], 1)) len++;
+        if (len > 2) { badRest = `${nameOf[id]}: ${len} συνεχόμενα βράδια`; break; }
+        const last = dates[i + len - 1];
+        for (let r = 1; r <= len; r++) {
+          const rest = addDays(last, r);
+          // εντός περιόδου μόνο
+          if (rest <= result.weeks[result.weeks.length - 1].dates[6] && workDates.get(id).has(rest)) {
+            badRest = `${nameOf[id]}: βράδυ έως ${last} (σειρά ${len}) αλλά δουλεύει ${rest}`;
+            break;
+          }
+        }
+        if (badRest) break;
+        i += len;
+      }
+      if (badRest) break;
+    }
+    check('Βράδια: υποχρεωτικό ρεπό μετά (2 σερί βράδια → 2 σερί ρεπό), και στα σύνορα', !badRest, badRest);
+  }
+
+  // ---------- 10. 19:00-03:00 κάθε μέρα & Supervisors Δευ-Παρ (14/07/2026) ----------
+  {
+    let placed1903 = 0;
+    let unc1903 = 0;
+    let supUnc = 0;
+    let supM = 0;
+    let supA = 0;
+    for (const wk of result.weeks) {
+      for (const a of wk.assignments) {
+        if (a.off) continue;
+        if (a.start === '19:00' && a.end === '03:00') placed1903++;
+        if (a.reqLabel === 'Supervisor' && a.start === '07:00') supM++;
+        if (a.reqLabel === 'Supervisor' && a.start === '16:00') supA++;
+      }
+      for (const u of wk.report.uncovered) {
+        if (u.start === '19:00') unc1903++;
+        if (u.label === 'Supervisor') supUnc++;
+      }
+    }
+    check(`19:00-03:00 κάθε μέρα Δευ-Κυρ: ${placed1903}/35 τοποθετημένες`, placed1903 + unc1903 === 35 && placed1903 >= 30, `placed=${placed1903} unc=${unc1903}`);
+    check(`Supervisors ΚΑΘΕ μέρα Δευ-Κυρ 07:00-15:00 & 16:00-24:00: πλήρης κάλυψη (${supM} πρωί / ${supA} απόγευμα)`, supUnc === 0 && supM >= 33 && supA >= 33, `unc=${supUnc} m=${supM} a=${supA}`);
   }
 
   // ---------- Σύνοψη κάλυψης ----------

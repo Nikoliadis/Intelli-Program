@@ -50,8 +50,9 @@ const REQUIREMENTS = {
     // Νικολαΐδου + Ρίζου μόνο ΣΚ) με δίκαιη εναλλαγή — απόφαση 12/07/2026.
     // Χωρίς απαίτηση skill: η λίστα ορίζει ποιοι το κάνουν (όπως η 19:00-03:00).
     { start: '06:00', end: '14:00', skill: null, department: null, period: null, headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
+    // Supervisors Δευ-Παρ: ΠΑΝΤΑ ένας 07:00-15:00 και ένας 16:00-24:00 (14/07/2026)
     { start: '07:00', end: '15:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
-    { start: '15:00', end: '23:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
+    { start: '16:00', end: '24:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     // Πειραιώς απόγευμα ×2 + ΗΡΩΝ απόγευμα ×2: ΝΩΡΙΣ στη σειρά (SOS,
     // 13/07/2026) — τα μικρά απογευματινά pools (π.χ. Φυσέκη/Πάνου) δεν
     // πρέπει να «καίγονται» πρώτα σε πρωινά slots
@@ -85,12 +86,16 @@ const REQUIREMENTS = {
     { start: '08:00', end: '16:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
     { start: '08:00', end: '16:00', skill: 'ALPHA', department: 'call', period: null, headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
     { start: '08:00', end: '16:00', skill: null, department: 'verification', period: 'morning', headcount: 1, label: 'Verification', color: 'Verification' },
-    { start: '15:00', end: '23:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
+    // ΣΚ απόγευμα supervisor = 16:00-24:00 (14/07/2026) — ακριβώς η σταθερή
+    // βάρδια ΣΚ της Αγγελούδη
+    { start: '16:00', end: '24:00', skill: null, department: 'supervisor', period: null, headcount: 1, label: 'Supervisor', color: 'Supervisor' },
     { start: '15:30', end: '23:30', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank', color: 'Eurobank' },
     { start: '16:00', end: '24:00', skill: 'EUROBANK', department: 'call', period: null, headcount: 1, label: 'Eurobank (μόνο)', color: 'Eurobank' },
     { start: '16:00', end: '24:00', skill: 'ALPHA', department: 'call', period: null, headcount: 2, label: 'Alpha', color: 'Υπόλοιπα call' },
     { start: '16:00', end: '24:00', skill: 'ΠΕΙΡΑΙΩΣ', department: null, period: 'afternoon', headcount: 1, label: 'Πειραιώς', color: 'Πειραιώς' },
     { start: '16:00', end: '24:00', skill: null, department: 'verification', period: 'afternoon', headcount: 1, label: 'Verification', color: 'Verification' },
+    // Η 19:00-03:00 τρέχει ΚΑΘΕ μέρα Δευ-Κυρ (14/07/2026) — μέσω λίστας Κ9
+    { start: '19:00', end: '03:00', skill: null, department: null, period: null, headcount: 1, label: 'Verification & call υπόλοιπα', color: 'Verification' },
     { start: '23:00', end: '07:00', skill: 'EUROBANK', department: null, period: null, headcount: 1, label: 'Νυχτερινή Eurobank', color: 'Eurobank' }
   ]
 };

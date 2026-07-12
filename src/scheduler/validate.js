@@ -172,6 +172,39 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
       warn(`Κ7: ${ag.name} σε νυχτερινή χωρίς «κάνει βράδυ»`, a.date);
     }
   }
+
+  // ---------- Κανόνες νυχτερινών 14/07/2026 ----------
+  // έως 2 βράδια/εβδομάδα, ρεπό μετά το βράδυ (2 σερί βράδια → 2 σερί ρεπό)
+  {
+    const nightsBy = new Map(); // agentId → sorted dates νυχτερινών
+    for (const a of work) {
+      if (!isNightRow(a)) continue;
+      if (!nightsBy.has(a.agentId)) nightsBy.set(a.agentId, []);
+      nightsBy.get(a.agentId).push(a.date);
+    }
+    const worksOn = (id, date) => work.some((x) => x.agentId === id && x.date === date);
+    for (const [id, dates] of nightsBy) {
+      const ag = agentById.get(id);
+      if (!ag) continue;
+      if (dates.length > 2) warn(`Νυχτερινές: ${ag.name} έχει ${dates.length} βράδια την εβδομάδα (μέγιστο 2)`);
+      dates.sort();
+      // Σειρές συνεχόμενων βραδιών + υποχρεωτική ανάπαυση μετά
+      let i = 0;
+      while (i < dates.length) {
+        let len = 1;
+        while (i + len < dates.length && dates[i + len] === addDays(dates[i + len - 1], 1)) len++;
+        if (len > 2) warn(`Νυχτερινές: ${ag.name} έχει ${len} ΣΥΝΕΧΟΜΕΝΑ βράδια (μέγιστο 2)`);
+        const lastNight = dates[i + len - 1];
+        for (let r = 1; r <= Math.min(len, 2); r++) {
+          const restDate = addDays(lastNight, r);
+          if (worksOn(id, restDate)) {
+            warn(`Νυχτερινές: ${ag.name} πρέπει να έχει ${len > 1 ? '2 συνεχόμενα ρεπό' : 'ρεπό'} μετά το βράδυ — δουλεύει ${restDate}`, restDate);
+          }
+        }
+        i += len;
+      }
+    }
+  }
   // Λίστα 06:00-14:00 (απόφαση 11/07/2026): μόνο οι εγκεκριμένοι
   const elig62 = ctx.eligibility.get('06:00-14:00');
   if (elig62 && elig62.size > 0) {
@@ -256,9 +289,6 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
         if (!match && def.period === 'afternoon' && isAfternoon(a.start)) match = true;
         // Νυχτερινή: δεκτή και η εναλλακτική 23:30-07:30 (Κ4)
         if (!match && def.start === '23:00' && isNightRow(a)) match = true;
-        // ΣΚ Supervisor απόγευμα: δεκτό το 16:00-24:00 της Αγγελούδη
-        if (!match && d >= 5 && def.department === 'supervisor' && def.start === '15:00' &&
-            a.start === '16:00' && a.end === '24:00') match = true;
         if (match) {
           used.add(i);
           covered++;
@@ -347,6 +377,20 @@ async function computeStateFromAssignments(weekStart, assignments, prevState) {
     for (const k of Object.keys(sundays).sort().slice(0, -3)) delete sundays[k];
     for (const k of Object.keys(sundaysOff).sort().slice(0, -3)) delete sundaysOff[k];
 
+    // Οφειλόμενη ανάπαυση από βράδια στο τέλος της εβδομάδας (14/07/2026):
+    // σειρά βραδιών που τελειώνει προς την Κυριακή → τόσα ρεπό στην επόμενη
+    let pendingNightRest = 0;
+    {
+      const nightDates = rows.filter((r) => isNightRow(r)).map((r) => r.date).sort();
+      if (nightDates.length) {
+        let len = 1;
+        for (let i = nightDates.length - 1; i > 0 && nightDates[i - 1] === addDays(nightDates[i], -1); i--) len++;
+        const lastNight = nightDates[nightDates.length - 1];
+        const restBeyond = dayNum(lastNight) + len - dayNum(weekEnd); // πόσα ρεπό πέφτουν μετά την Κυριακή
+        pendingNightRest = Math.max(0, Math.min(len, restBeyond));
+      }
+    }
+
     let rizouMode = prev.rizouMode;
     if (rule(ag, 'weekly_alternation') && rows.length > 0) {
       // Η επόμενη εβδομάδα παίρνει το αντίθετο απ' ό,τι δούλεψε κυρίως τώρα
@@ -354,7 +398,7 @@ async function computeStateFromAssignments(weekStart, assignments, prevState) {
       rizouMode = mornings >= rows.length / 2 ? 'afternoon' : 'morning';
     }
 
-    state[ag.id] = { streak, lastEndAbs, nights, weekends: prev.weekends + wknd, count1903, count62, sundays, sundaysOff, rizouMode };
+    state[ag.id] = { streak, lastEndAbs, nights, weekends: prev.weekends + wknd, count1903, count62, sundays, sundaysOff, pendingNightRest, rizouMode };
   }
   return state;
 }

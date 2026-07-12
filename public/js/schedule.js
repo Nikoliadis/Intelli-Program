@@ -4,7 +4,7 @@
 // όχι μπλοκάρισμα, κόκκινη ένδειξη ακάλυπτων, αποθήκευση στη βάση.
 (() => {
   const DAY_GR = ['ΔΕΥΤΕΡΑ', 'ΤΡΙΤΗ', 'ΤΕΤΑΡΤΗ', 'ΠΕΜΠΤΗ', 'ΠΑΡΑΣΚΕΥΗ', 'ΣΑΒΒΑΤΟ', 'ΚΥΡΙΑΚΗ'];
-  const OFF_LABELS = { repo: 'ΡΕΠΟ', fixed_off: 'ΡΕΠΟ', rule: 'ΡΕΠΟ', repo_request: 'ΑΙΤΗΜΑ ΡΕΠΟ', leave: 'ΑΔΕΙΑ', sick: 'ΑΣΘΕΝΕΙΑ' };
+  const OFF_LABELS = { repo: 'ΡΕΠΟ', fixed_off: 'ΡΕΠΟ', rule: 'ΡΕΠΟ', repo_request: 'ΑΙΤΗΜΑ ΡΕΠΟ', leave: 'ΑΔΕΙΑ', sick: 'ΑΣΘΕΝΕΙΑ', night_rest: 'ΡΕΠΟ (μετά βράδυ)' };
 
   const $ = (id) => document.getElementById(id);
   let meta = { roles: [] };
