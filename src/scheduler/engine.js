@@ -336,7 +336,10 @@ function canPlace(w, plan, d, start, end, opts = {}) {
   // Όριο Κυριακών/μήνα: έως 2 για μη-σταθερούς εκτός supervisors.
   // Ο Νικολιάδης (sunday_worker) ΔΟΥΛΕΥΕΙ Κυριακές χωρίς όριο —
   // αντίθετα, περιορίζονται τα ΡΕΠΟ Κυριακής του (το πολύ 1/μήνα, βλ. phaseOffs)
-  if (d === 6 && !sundayExempt(plan.agent) && !rule(plan.agent, 'sunday_worker')) {
+  // Εξαίρεση (απόφαση 15/07/2026): το «ακριβώς 2 ρεπό» υπερισχύει του ορίου
+  // Κυριακών. Όταν ο agent θα έπαιρνε αλλιώς 3ο ρεπό (opts.allowSundayOver
+  // από το win-win πέρασμα), επιτρέπεται 3η Κυριακή για να πιάσει 5 μέρες.
+  if (d === 6 && !opts.allowSundayOver && !sundayExempt(plan.agent) && !rule(plan.agent, 'sunday_worker')) {
     const st = agentState(w, plan.agent.id);
     const used = (st.sundays && st.sundays[w.dates[6].slice(0, 7)]) || 0;
     if (used >= 2) return false;
@@ -777,8 +780,12 @@ function phaseOffs(w, reqByDay) {
 
     // ΣΚ MAX (hard): οι θέσεις ΣΚ μοιράστηκαν ΗΔΗ (phaseRequirements [5,6])
     // και οι fillers δεν αγγίζουν ΣΚ — άρα κάθε κενό Σάββατο/Κυριακή είναι
-    // ΑΝΑΠΟΦΕΥΚΤΟ ρεπό. Χρεώνεται ΠΡΩΤΟ στο budget, αλλιώς ο agent παίρνει
-    // και ρεπό καθημερινής και καταλήγει με 3 (HARD 2 ρεπό — 15/07/2026)
+    // ΑΝΑΠΟΦΕΥΚΤΟ ρεπό. Αν ΚΑΙ ΤΑ ΔΥΟ ΣΚ είναι ελεύθερα (δεν πήρε θέση),
+    // γίνονται ΜΑΖΙ το ζευγάρι ρεπό του (Σαβ+Κυρ συνεχόμενα) — αλλιώς θα
+    // κατέληγε με ρεπό καθημερινής + έξτρα ΣΚ = 3+ ρεπό (HARD 2 ρεπό).
+    // ΟΜΩΣ αν δουλεύει ΤΟ ΕΝΑ ΣΚ (π.χ. Κυριακή), ΜΗΝ κλειδώνεις το ελεύθερο
+    // Σάββατο εδώ μεμονωμένα: ο βρόχος παρακάτω θα το ζευγαρώσει με την
+    // Παρασκευή (Παρ+Σαβ συνεχόμενα) — τα ρεπό ΜΑΖΙ (προτίμηση 15/07/2026).
     for (const d of [5, 6]) {
       if (plan.offNeeded <= 0) break;
       if (plan.days[d]) continue;
@@ -836,8 +843,10 @@ function phaseOffs(w, reqByDay) {
 
         let score = 0;
         // Σ2 ΔΥΝΑΤΑ (15/07/2026): τα ρεπό ΜΑΖΙ για όλους — όχι σπαστά.
-        // Το bonus πρέπει να νικά το «οριακό» dayRisk (80) μιας μέρας μόνο
-        // στους consecutive_off_strong — στους υπόλοιπους νικά τα μέτρια.
+        // Το bonus πρέπει να νικά το «οριακό» dayRisk (~80) της ενδιάμεσης
+        // μέρας ώστε να προτιμηθεί το ΣΥΝΕΧΟΜΕΝΟ ζευγάρι — αλλά ΟΧΙ το κρίσιμο
+        // (200, θα έμενε ακάλυπτο). Έτσι οι εργαζόμενοι ΣΚ παίρνουν Δευ+Τρι
+        // μαζί αντί για σπαστά. (προτίμηση συνεχόμενων ρεπό — 15/07/2026)
         if (opt.length === 2) score += rule(a, 'consecutive_off_strong') ? 90 : 55;
         // Μονό ρεπό: προτίμησε να «κολλήσει» δίπλα σε υπάρχον ρεπό/αίτημα
         // (π.χ. αίτημα Τετάρτη → το δεύτερο ρεπό Τρίτη ή Πέμπτη)
@@ -946,11 +955,17 @@ function phaseRequirements(w, reqByDay, opts = {}) {
           // Scoring
           let score = 100;
           const st = agentState(w, a.id);
-          // Σ4: συνέπεια ωραρίου μέσα στην εβδομάδα
+          // Σ4 ΔΥΝΑΤΟ: συνέπεια ημι-ημέρας μέσα στην εβδομάδα. Το ανακάτεμα
+          // πρωί/απόγευμα δημιουργεί «παγιδευμένες» ενδιάμεσες μέρες — 11h
+          // ανάπαυση αδύνατη μεταξύ απογεύματος (λήξη 23:30) και επόμενου
+          // πρωινού (08:00) — που καταλήγουν σε αναγκαστικό 3ο ρεπό (15/07/2026)
+          const myMorning = isMorning(shS, shE);
           for (let i = 0; i < 7; i++) {
             const e = plan.days[i];
-            if (e && e.type === 'work' && e.start === shS) score += 6;
-            else if (e && e.type === 'work' && isMorning(e.start, e.end) !== isMorning(shS, shE)) score -= 5;
+            if (!e || e.type !== 'work') continue;
+            if (e.start === shS) score += 8;
+            if (isMorning(e.start, e.end) === myMorning) score += 6;
+            else score -= 30;
           }
           // Προτεραιότητα σε όσους απέχουν από τον στόχο 5 ημερών
           score += (workTarget(plan) - assignedCount(plan)) * 4;
@@ -974,9 +989,11 @@ function phaseRequirements(w, reqByDay, opts = {}) {
             // την αφήνει σε όποιον τη χρειάζεται — ΕΚΤΟΣ των supervisors:
             // οι δικές τους θέσεις ΣΚ καλύπτονται μόνο από αυτούς
             else if (!a.departments.includes('supervisor')) score -= 15;
-            // Ρεπό ΜΑΖΙ (15/07/2026): όποιος δουλεύει ήδη Σάββατο προτιμάται
-            // και την Κυριακή — το ΣΚ συγκεντρώνεται σε λιγότερα άτομα και
-            // οι υπόλοιποι παίρνουν το ζευγάρι Σαβ+Κυρ ως ρεπό
+            // Ρεπό ΜΑΖΙ (15/07/2026): όποιος δουλεύει Σάββατο πρέπει να δουλεύει
+            // ΚΑΙ Κυριακή (ΣΥΖΕΥΞΗ) — αλλιώς μένει με ρεπό Κυριακής + καθημερινής
+            // = σπαστά. Ισχυρό bonus ώστε να νικά το needWknd (που μειώνεται
+            // μόλις πάρει το Σάββατο): οι ίδιοι κάνουν όλο το ΣΚ, οι υπόλοιποι
+            // παίρνουν Σαβ+Κυρ μαζί. (προτίμηση συνεχόμενων ρεπό — 15/07/2026)
             if (d === 6) {
               const sat = plan.days[5];
               if (sat && sat.type === 'work') score += 30;
@@ -1190,7 +1207,7 @@ function phase1903(w, reqByDay, opts = {}) {
 
 // Φάση 7: συμπλήρωση — ΟΛΟΙ οι ενεργοί φτάνουν τις 5 εργάσιμες (Κ2,
 // απόφαση προϊσταμένου 09/07/2026), με λογική βάρδια βάσει κανόνων/Σ4.
-function phaseFillers(w) {
+function phaseFillers(w, reqByDay) {
   const { ctx } = w;
   for (const a of ctx.agents) {
     const plan = w.plans.get(a.id);
@@ -1296,6 +1313,62 @@ function phaseFillers(w) {
     }
     if (deficit > 0) {
       w.report.soft.push(`${a.name}: μόνο ${assignedCount(plan)}/${workTarget(plan)} εργάσιμες — δεν βρέθηκε επιτρεπτή βάρδια για ${deficit} μέρα/ες.`);
+    }
+  }
+
+  // Πέρασμα ΣΚ WIN-WIN (15/07/2026): όποιος ΑΚΟΜΑ έχει έλλειμμα (μένει με 3ο
+  // ρεπό) ΚΑΙ υπάρχει ΑΚΑΛΥΠΤΟ requirement slot ΣΚ που δικαιούται → τον βάζει
+  // εκεί. Λύνει ΤΑΥΤΟΧΡΟΝΑ «ακριβώς 2 ρεπό» + «ΣΚ MIN καλυμμένο», ΧΩΡΙΣ να
+  // σπάει το ΣΚ MAX (γεμίζει μόνο ΔΗΛΩΜΕΝΗ, ακάλυπτη θέση του πίνακα).
+  if (reqByDay) {
+    for (const a of ctx.agents) {
+      const plan = w.plans.get(a.id);
+      let deficit = workTarget(plan) - assignedCount(plan);
+      if (deficit <= 0) continue;
+      for (const d of [5, 6]) {
+        if (deficit <= 0) break;
+        const cur = plan.days[d];
+        // Μόνο πάνω σε παραγόμενο ρεπό (όχι fixed_off/night_rest/αίτημα/κενό-άδεια)
+        if (!cur || cur.type !== 'off' || cur.reason !== 'repo') continue;
+        for (const rq of reqByDay[d]) {
+          if (deficit <= 0) break;
+          if (rq.covered >= rq.def.headcount) continue;
+          if (rq.def.start === '23:00' || rq.def.start === '19:00') continue;
+          if (!deptMatch(a, rq.def.department)) continue;
+          if (rq.def.skill && !a.skills.has(rq.def.skill)) continue;
+          const opts = rq.def.period
+            ? (rq.def.period === 'morning'
+                ? [[rq.def.start, rq.def.end], ...FILLER_MORNING.filter(([s]) => s !== rq.def.start)]
+                : [[rq.def.start, rq.def.end], ...FILLER_AFTERNOON.filter(([s]) => s !== rq.def.start)])
+            : [[rq.def.start, rq.def.end]];
+          const telework = a.workLocation === 'home';
+          plan.days[d] = null; // ξεκλείδωσε το ρεπό ΠΡΙΝ το probe (αλλιώς canPlace=false)
+          // allowSundayOver: το «ακριβώς 2 ρεπό» υπερισχύει του ορίου Κυριακών
+          // (απόφαση 15/07/2026) — ΜΟΝΟ όταν αυτή η μέρα φτάνει τον agent
+          // ΑΚΡΙΒΩΣ στις 5 (deficit==1). Αν θα έμενε κι άλλο κοντός (π.χ.
+          // νυχτερινός με πολλές αναπαύσεις), δεν «καίμε» 3η Κυριακή τζάμπα.
+          const allowSundayOver = deficit === 1;
+          let shift = null;
+          for (const [s, e] of opts) {
+            if (canPlace(w, plan, d, s, e, { telework, allowSundayOver })) { shift = [s, e]; break; }
+          }
+          if (!shift) { markOff(w, plan, d, 'repo'); continue; } // επαναφορά
+          place(w, plan, d, {
+            start: shift[0], end: shift[1],
+            skill: rq.def.skill, reqLabel: rq.def.label, usedForReq: true,
+            label: [telework ? 'ΤΗΛΕΡΓΑΣΙΑ' : null, rq.def.label === 'International' ? 'INTERNATIONAL' : null].filter(Boolean).join(' ') || null,
+            location: telework ? 'home' : 'office',
+            roleId: rq.def.roleId, color: rq.def.color
+          });
+          rq.covered++;
+          deficit--;
+          // Αφαίρεσε το slot από τα ακάλυπτα του report
+          const ui = w.report.uncovered.findIndex(
+            (u) => u.date === w.dates[d] && u.start === rq.def.start && u.end === rq.def.end
+          );
+          if (ui >= 0) w.report.uncovered.splice(ui, 1);
+        }
+      }
     }
   }
 }
@@ -1490,7 +1563,7 @@ function generateWeek(ctx, weekStart, state, opts = {}) {
   phaseOffs(w, reqByDay); // ρεπό: Σ2, Σ3, Κ10
   phaseRequirements(w, reqByDay, { days: [0, 1, 2, 3, 4] }); // Κ1 καθημερινές
   phase1903(w, reqByDay); // Κ9 pass B (και Αγγελή, με γνωστή παρουσία)
-  phaseFillers(w);       // Κ2: όλοι στις 5 εργάσιμες
+  phaseFillers(w, reqByDay); // Κ2: όλοι στις 5 εργάσιμες
   phaseK4(w);            // οριστικοποίηση 23:00/23:30
   phasePairReport(w);    // Σ5 αναφορά
 

@@ -95,24 +95,13 @@ function buildNameMatcher(agents) {
 // Κείμενα-ετικέτες που ΔΕΝ είναι ονόματα — δεν αναφέρονται ως «αγνώριστα»
 const LABEL_TEXTS = /INTERNATIONAL|ΓΡΑΦΕΙΟ|ΤΗΛΕΡΓΑΣΙΑ|VERIFICATION|CALL|ΝΥΧΤΕΡΙΝΗ|ΣΠΑΣΤΟ|ΑΝΟΙΓΜΑ|ΠΕΙΡΑΙΩΣ|ΗΡΩΝ|\/|--|->/i;
 
-// POST /api/import/week  body: {weekStart:'YYYY-MM-DD' (Δευτέρα), fileBase64}
-router.post('/week', async (req, res) => {
-  try {
-    const { weekStart, fileBase64 } = req.body || {};
-    if (!weekStart || !isValidDate(weekStart) || dayOfWeek(weekStart) !== 1) {
-      return res.status(400).json({ ok: false, error: 'Δώσε τη Δευτέρα της εβδομάδας του αρχείου' });
-    }
-    if (!fileBase64) return res.status(400).json({ ok: false, error: 'Δεν στάλθηκε αρχείο' });
+const err400 = (msg) => Object.assign(new Error(msg), { status: 400 });
 
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(Buffer.from(fileBase64, 'base64'));
-    const ws = wb.worksheets[0];
-    if (!ws || ws.rowCount < 20) return res.status(400).json({ ok: false, error: 'Μη αναγνωρίσιμο φύλλο' });
-
-    const [agents] = await pool.query('SELECT id, full_name, departments FROM agents WHERE active = 1');
-    const matchAgent = buildNameMatcher(agents);
-
-    const maxCol = ws.columnCount;
+// Ανάλυση φύλλου Excel → βάρδιες. Κοινό για /week (αποθήκευση) και /preview
+// (μόνο εμφάνιση). Πετάει err400 με μήνυμα αν το format δεν αναγνωρίζεται.
+function parseSchedule(ws, agents, weekStart) {
+  const matchAgent = buildNameMatcher(agents);
+  const maxCol = ws.columnCount;
     const cellInfo = (r, c) => {
       const cell = ws.getCell(r, c);
       let v = cell.value;
@@ -130,7 +119,7 @@ router.post('/week', async (req, res) => {
       if (/^00[.:]00\s*[-–]\s*0?1[.:]00/.test(v)) { zoneRow0 = r; break; }
     }
     if (!zoneRow0) {
-      return res.status(400).json({ ok: false, error: 'Δεν βρέθηκε η ζώνη «00:00-01:00» στη στήλη A — μη αναγνωρίσιμο format' });
+      throw err400('Δεν βρέθηκε η ζώνη «00:00-01:00» στη στήλη A — μη αναγνωρίσιμο format');
     }
 
     // ---- 1. Μπλοκ ημερών από την εναλλαγή χρώματος γεμίσματος των κενών ----
@@ -182,10 +171,7 @@ router.post('/week', async (req, res) => {
       if (blocks.length === 7) break;
     }
     if (blocks.length !== 7) {
-      return res.status(400).json({
-        ok: false,
-        error: `Αναγνωρίστηκαν ${blocks.length} μπλοκ ημερών αντί για 7 — μη αναμενόμενο format αρχείου`
-      });
+      throw err400(`Αναγνωρίστηκαν ${blocks.length} μπλοκ ημερών αντί για 7 — μη αναμενόμενο format αρχείου`);
     }
 
     // ---- 2. Σάρωση στηλών: συνεχόμενα «τρεξίματα» ίδιου ονόματος ----
@@ -280,8 +266,34 @@ router.post('/week', async (req, res) => {
     }
 
     if (assignments.length === 0) {
-      return res.status(400).json({ ok: false, error: 'Δεν αναγνωρίστηκε καμία βάρδια στο αρχείο' });
+      throw err400('Δεν αναγνωρίστηκε καμία βάρδια στο αρχείο');
     }
+
+    return { assignments, unmatched: [...unmatched] };
+}
+
+// Φόρτωση + parse του base64 αρχείου. Επιστρέφει {assignments, unmatched, weekStart}.
+async function loadAndParse(body) {
+  const { weekStart, fileBase64 } = body || {};
+  if (!weekStart || !isValidDate(weekStart) || dayOfWeek(weekStart) !== 1) {
+    throw err400('Δώσε τη Δευτέρα της εβδομάδας του αρχείου');
+  }
+  if (!fileBase64) throw err400('Δεν στάλθηκε αρχείο');
+
+  const wb = new ExcelJS.Workbook();
+  await wb.xlsx.load(Buffer.from(fileBase64, 'base64'));
+  const ws = wb.worksheets[0];
+  if (!ws || ws.rowCount < 20) throw err400('Μη αναγνωρίσιμο φύλλο');
+
+  const [agents] = await pool.query('SELECT id, full_name, departments FROM agents WHERE active = 1');
+  const { assignments, unmatched } = parseSchedule(ws, agents, weekStart);
+  return { weekStart, assignments, unmatched };
+}
+
+// POST /api/import/week  body: {weekStart:'YYYY-MM-DD' (Δευτέρα), fileBase64}
+router.post('/week', async (req, res) => {
+  try {
+    const { weekStart, assignments, unmatched } = await loadAndParse(req.body);
 
     // ---- 4. Αποθήκευση ως schedule (ίδια λογική με το /api/schedule/save) ----
     const [prevRows] = await pool.query(
@@ -321,7 +333,63 @@ router.post('/week', async (req, res) => {
       conn.release();
     }
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    res.status(err.status || 500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/import/preview  body: {weekStart, fileBase64}
+// Διαβάζει το Excel ΧΩΡΙΣ αποθήκευση και επιστρέφει ανά agent τι διάβασε +
+// το «σερί» με το οποίο μπαίνει στην επόμενη εβδομάδα (για να ελέγξει ο
+// χρήστης ότι διαβάστηκε σωστά ΠΡΙΝ πατήσει SOS — 15/07/2026).
+router.post('/preview', async (req, res) => {
+  try {
+    const { weekStart, assignments, unmatched } = await loadAndParse(req.body);
+
+    const [prevRows] = await pool.query(
+      'SELECT data FROM schedules WHERE week_start < ? ORDER BY week_start DESC, id DESC LIMIT 1',
+      [weekStart]
+    );
+    const prevState = prevRows[0] ? JSON.parse(prevRows[0].data).state : null;
+    const endState = await computeStateFromAssignments(weekStart, assignments, prevState);
+
+    const [agents] = await pool.query('SELECT id, full_name FROM agents WHERE active = 1 ORDER BY full_name');
+    const dates = [];
+    for (let i = 0; i < 7; i++) dates.push(addDays(weekStart, i));
+
+    // Χάρτης agentId|date → βάρδια
+    const byKey = new Map();
+    for (const a of assignments) byKey.set(`${a.agentId}|${a.date}`, a);
+
+    const rows = agents.map((ag) => {
+      const days = dates.map((d) => {
+        const a = byKey.get(`${ag.id}|${d}`);
+        return a ? `${a.start}-${a.end}` : null;
+      });
+      const workDays = days.filter(Boolean).length;
+      const st = (endState && endState[ag.id]) || {};
+      return {
+        agentId: ag.id,
+        name: ag.full_name,
+        days,
+        workDays,
+        // σερί με το οποίο ΜΠΑΙΝΕΙ στην επόμενη εβδομάδα (πόσες συνεχόμενες
+        // εργάσιμες κλείνει η Κυριακή) — αυτό ελέγχει το Κ10 στη Δευτέρα
+        streakInto: st.streak || 0,
+        pendingNightRest: st.pendingNightRest || 0,
+        inFile: workDays > 0
+      };
+    });
+
+    res.json({
+      ok: true,
+      weekStart,
+      dates,
+      rows,
+      unmatchedNames: unmatched,
+      totalShifts: assignments.length
+    });
+  } catch (err) {
+    res.status(err.status || 500).json({ ok: false, error: err.message });
   }
 });
 

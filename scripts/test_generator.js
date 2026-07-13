@@ -11,7 +11,7 @@
 //
 // Χρήση: node scripts/test_generator.js [YYYY-MM]   (default: 2026-07)
 const { generatePeriod } = require('../src/scheduler');
-const { weeksCovering, monthBounds, dayOfWeek } = require('../src/utils/dates');
+const { weeksCovering, monthBounds, dayOfWeek, addDays } = require('../src/utils/dates');
 const { shiftAbs, toMin, isMorning } = require('../src/scheduler/time');
 const pool = require('../src/db/pool');
 
@@ -385,14 +385,33 @@ function check(name, cond, detail) {
       if (!perMonth.has(k)) perMonth.set(k, new Set());
       perMonth.get(k).add(a.date);
     }
+    // Ρεπό (μη-άδεια) ανά agent ανά εβδομάδα — για την εξαίρεση της απόφασης
+    // 15/07/2026: 3η+ Κυριακή επιτρέπεται ΜΟΝΟ όταν εξασφαλίζει «ακριβώς 2 ρεπό»
+    // (η εβδομάδα της έξτρα Κυριακής πρέπει να έχει ≤2 ρεπό — αλλιώς σπατάλη)
+    const offsInWeek = new Map(); // agentId|weekStart → πλήθος ρεπό (όχι άδεια)
+    for (const wk of genWeeks) {
+      for (const a of wk.assignments) {
+        if (a.off && !['leave', 'sick'].includes(a.reason)) {
+          const k = `${a.agentId}|${wk.weekStart}`;
+          offsInWeek.set(k, (offsInWeek.get(k) || 0) + 1);
+        }
+      }
+    }
+    // weekStart για μια ημερομηνία Κυριακής = η Δευτέρα 6 μέρες πριν
+    const weekStartOfSunday = (d) => addDays(d, -6);
+
     let bad = null;
     for (const [k, ds] of perMonth) {
       const [idStr, mk] = k.split('|');
       const id = Number(idStr);
       if (exempt.has(id) || id === nikId) continue; // Νικολιάδης: χωρίς όριο δουλεμένων Κυριακών
-      if (ds.size > 2) { bad = `${nameOf[id]}: ${ds.size} Κυριακές τον ${mk} (όριο 2)`; break; }
+      if (ds.size <= 2) continue;
+      // >2 Κυριακές: επιτρεπτό μόνο αν ΚΑΘΕ εβδομάδα δουλεμένης Κυριακής
+      // έχει ≤2 ρεπό (η Κυριακή ήταν load-bearing για τα «ακριβώς 2 ρεπό»)
+      const wasteful = [...ds].some((sun) => (offsInWeek.get(`${id}|${weekStartOfSunday(sun)}`) || 0) > 2);
+      if (wasteful) { bad = `${nameOf[id]}: ${ds.size} Κυριακές τον ${mk} (όριο 2, χωρίς να εξυπηρετούν «2 ρεπό»)`; break; }
     }
-    check('Όριο Κυριακών: ≤2/μήνα (μη σταθεροί, εκτός supervisors)', !bad, bad);
+    check('Όριο Κυριακών: ≤2/μήνα — εξαίρεση 3ης μόνο για «ακριβώς 2 ρεπό» (15/07/2026)', !bad, bad);
 
     // Νικολιάδης: δουλεύει Κυριακές — το πολύ 1 ΡΕΠΟ Κυριακής/μήνα (12/07/2026)
     const nikSundaysOff = new Map(); // month → count

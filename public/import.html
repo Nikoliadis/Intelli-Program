@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="el">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Έλεγχος Excel — Πρόγραμμα Βαρδιών</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .imp-cell { text-align:center; font-size:.82rem; white-space:nowrap; }
+    .imp-off { color:#9aa0b0; }
+    .imp-warn td { background:#fff4f4; }
+    .imp-badge { display:inline-block; min-width:1.4rem; padding:.05rem .35rem; border-radius:6px; font-weight:600; font-size:.8rem; }
+    .imp-badge.ok { background:#e6f5ea; color:#1c7a3e; }
+    .imp-badge.bad { background:#fde8e8; color:#b42318; }
+    .imp-badge.streak { background:#eef1fb; color:#3a49a8; }
+    .imp-help { font-size:.85rem; color:#56607a; margin:.3rem 0 .8rem; }
+    #impUnmatched { background:#fff4f4; border:1px solid #f3c2c2; border-radius:8px; padding:.6rem .8rem; margin:.6rem 0; color:#b42318; font-size:.88rem; display:none; }
+    #impSummary { font-weight:600; margin:.4rem 0; }
+    .imp-weekend th, .imp-weekend td { background:#fbf6e9; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">Πρόγραμμα Βαρδιών</div>
+    <nav>
+      <a href="/">Agents</a>
+      <a href="/period.html">Περίοδος</a>
+      <a href="/schedule.html">Πρόγραμμα</a>
+      <a href="/import.html" class="active">Έλεγχος Excel</a>
+    </nav>
+    <div class="user">
+      <span id="userName"></span>
+      <button class="btn small" id="logoutBtn">Αποσύνδεση</button>
+    </div>
+  </header>
+
+  <main>
+    <p class="imp-help">
+      Ανέβασε το Excel μιας εβδομάδας που έχει ήδη βγει (π.χ. την προηγούμενη).
+      Θα δεις <strong>ανά agent τι διάβασε</strong> το σύστημα και με πόσες συνεχόμενες
+      μέρες μπαίνει στην επόμενη εβδομάδα (για σωστό Κ10 — «5 σερί → ρεπό»).
+      Έλεγξε ότι διαβάστηκε σωστά και μετά πάτα <strong>Αποθήκευση</strong> ώστε το SOS να το υπολογίζει.
+    </p>
+
+    <div class="toolbar">
+      <label class="field" style="margin:0">
+        <span style="font-size:.8rem;font-weight:600;color:#56607a">Δευτέρα της εβδομάδας του αρχείου</span>
+        <input type="date" id="impWeekStart" style="width:170px">
+      </label>
+      <input type="file" id="impFile" accept=".xlsx">
+      <div class="spacer"></div>
+      <button class="btn primary" id="impPreviewBtn">🔍 Έλεγχος (χωρίς αποθήκευση)</button>
+      <button class="btn" id="impSaveBtn" disabled title="Πρώτα κάνε έλεγχο">💾 Αποθήκευση</button>
+    </div>
+
+    <div class="error-msg" id="impErr" style="display:none"></div>
+    <div id="impUnmatched"></div>
+    <div id="impSummary"></div>
+
+    <table class="data" id="impTable" style="display:none">
+      <thead>
+        <tr id="impHead"></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/js/import.js"></script>
+</body>
+</html>
