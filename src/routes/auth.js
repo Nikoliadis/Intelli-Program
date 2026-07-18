@@ -23,7 +23,9 @@ router.post('/login', async (req, res) => {
     req.session.canEditAgents = user.can_edit_agents !== 0;
     res.json({ ok: true, displayName: req.session.displayName, canEditAgents: req.session.canEditAgents });
   } catch (err) {
-    res.status(500).json({ ok: false, error: err.message });
+    // Μη συνδεδεμένος χρήστης: ΠΟΤΕ εσωτερικές λεπτομέρειες (SQL/σχήμα) προς τα έξω
+    console.error('login error:', err.message);
+    res.status(500).json({ ok: false, error: 'Προσωρινό πρόβλημα. Δοκίμασε ξανά.' });
   }
 });
 

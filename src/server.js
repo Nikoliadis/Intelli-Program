@@ -4,6 +4,8 @@
 const express = require('express');
 const session = require('express-session');
 const MySQLStore = require('express-mysql-session')(session);
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const pool = require('./db/pool');
 const config = require('./db/config');
@@ -22,6 +24,44 @@ const PORT = process.env.PORT || 3000;
 
 // Πίσω από το HTTPS proxy του Railway/Render: σωστό req.ip και ασφαλή cookies
 app.set('trust proxy', 1);
+
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// ---------- Ασφάλεια (18/07/2026) ----------
+// Κεφαλίδες: anti-clickjacking, anti-MIME-sniffing, HSTS, CSP.
+// Το CSP επιτρέπει inline STYLES (τα χρησιμοποιεί το UI) αλλά ΟΧΙ inline
+// scripts — όλη η JS είναι σε εξωτερικά αρχεία, οπότε κόβει XSS στη ρίζα.
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+        connectSrc: ["'self'"],
+        fontSrc: ["'self'", 'data:'],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'none'"],
+        baseUri: ["'self'"],
+        formAction: ["'self'"]
+      }
+    },
+    crossOriginEmbedderPolicy: false
+  })
+);
+
+// Brute-force προστασία στο login: 10 ΑΠΟΤΥΧΗΜΕΝΕΣ προσπάθειες ανά IP / 15'
+// (οι επιτυχημένες δεν μετράνε, ώστε να μην ενοχλείται ο κανονικός χρήστης)
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  skipSuccessfulRequests: true,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { ok: false, error: 'Πολλές προσπάθειες σύνδεσης. Δοκίμασε ξανά σε λίγα λεπτά.' }
+});
+app.use('/api/login', loginLimiter);
 
 // Μεγαλύτερο όριο body: οι validate/save κλήσεις στέλνουν ολόκληρες εβδομάδες αναθέσεων
 app.use(express.json({ limit: '5mb' }));
@@ -45,7 +85,12 @@ app.use(
     store: sessionStore,
     resave: false,
     saveUninitialized: false,
-    cookie: { httpOnly: true, maxAge: 8 * 60 * 60 * 1000 } // 8 ώρες
+    cookie: {
+      httpOnly: true,               // δεν διαβάζεται από JavaScript
+      sameSite: 'lax',              // προστασία CSRF
+      secure: IS_PROD,              // μόνο μέσω HTTPS στην παραγωγή
+      maxAge: 8 * 60 * 60 * 1000    // 8 ώρες
+    }
   })
 );
 

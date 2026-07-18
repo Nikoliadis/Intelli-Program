@@ -80,12 +80,12 @@
 
       let fixed = '';
       if (a.fixed_shift_start) {
-        fixed = a.fixed_shift_start + '–' + a.fixed_shift_end;
+        fixed = esc(a.fixed_shift_start) + '–' + esc(a.fixed_shift_end);
         if (a.fixed_days) fixed += '<br><span class="muted">' + a.fixed_days.map((x) => DAY_NAMES[x]).join(', ') + '</span>';
       }
       const extras = [];
       if (a.fixed_days_off) extras.push('Ρεπό: ' + a.fixed_days_off.map((x) => DAY_NAMES[x]).join('+'));
-      if (a.weekend_shift) extras.push('ΣΚ: ' + a.weekend_shift);
+      if (a.weekend_shift) extras.push('ΣΚ: ' + esc(a.weekend_shift)); // ελεύθερο κείμενο → escape
       if (a.work_location === 'home') extras.push('Τηλεργασία');
 
       const consText = a.constraints.map((c) => esc(c.description)).join('<br>');
