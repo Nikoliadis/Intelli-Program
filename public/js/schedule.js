@@ -466,6 +466,26 @@
 
   async function saveWeek(i) {
     const w = weekData[i];
+
+    // HARD Κ8 (18/07/2026): ΔΕΝ αποθηκεύεται εβδομάδα με ανάπαυση <11h.
+    // Φρέσκος έλεγχος τη στιγμή του save (το live validation είναι debounced).
+    // Το νόμιμο σπαστό (π.χ. Κουλογιάννης 9h) εξαιρείται ήδη στο backend.
+    const prev = i > 0 && weekData[i - 1].assignments.length ? weekData[i - 1].assignments : undefined;
+    const next = i < weekData.length - 1 && weekData[i + 1].assignments.length ? weekData[i + 1].assignments : undefined;
+    const v = await api('/api/schedule/validate', {
+      method: 'POST',
+      body: JSON.stringify({ weekStart: w.weekStart, assignments: w.assignments, prevAssignments: prev, nextAssignments: next })
+    });
+    if (v.ok) {
+      const k8 = (v.warnings || []).filter((x) => x.code === 'K8');
+      if (k8.length) {
+        alert('⛔ Δεν αποθηκεύεται — υπάρχει ανάπαυση κάτω από 11 ώρες (Κ8):\n\n'
+          + k8.map((x) => '• ' + x.text).join('\n')
+          + '\n\nΔιόρθωσε τις βάρδιες (π.χ. πρωί μετά από απόγευμα) και ξαναδοκίμασε.');
+        throw new Error('K8_BLOCK');
+      }
+    }
+
     const d = await api('/api/schedule/save', {
       method: 'POST',
       body: JSON.stringify({ weekStart: w.weekStart, assignments: w.assignments, report: w.report })
@@ -481,6 +501,7 @@
       toast('Η εβδομάδα αποθηκεύτηκε');
       renderTabs();
     } catch (e) {
+      if (e.message === 'K8_BLOCK') return; // ήδη έγινε alert
       toast('Σφάλμα αποθήκευσης: ' + e.message);
     }
   });
@@ -495,6 +516,7 @@
       toast('Όλη η περίοδος αποθηκεύτηκε');
       renderTabs();
     } catch (e) {
+      if (e.message === 'K8_BLOCK') return; // ήδη έγινε alert
       toast('Σφάλμα αποθήκευσης: ' + e.message);
     }
   });

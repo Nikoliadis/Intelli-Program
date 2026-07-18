@@ -230,6 +230,16 @@ function shiftAllowedByRules(agent, d, start, end, opts = {}) {
     return start === agent.fixedStart && end === agent.fixedEnd;
   }
 
+  // Supervisors: ΜΟΝΟ 07:00-15:00 και 16:00-24:00· ο έξτρα/2ος supervisor
+  // ΠΑΝΤΑ 08:00-16:00. Κανένα άλλο ωράριο (HARD — 18/07/2026).
+  if (agent.departments.includes('supervisor')) {
+    return (
+      (start === '07:00' && end === '15:00') ||
+      (start === '16:00' && end === '24:00') ||
+      (start === '08:00' && end === '16:00')
+    );
+  }
+
   for (const r of agent.rules) {
     switch (r.type) {
       case 'day_off_or_telework':
@@ -1225,9 +1235,9 @@ function phaseFillers(w, reqByDay) {
       if (a.fixedStart && !a.fixedDays) {
         shifts = [[a.fixedStart, a.fixedEnd]]; // π.χ. Σταθοπούλου 16:00-24:00
       } else if (a.departments.includes('supervisor')) {
-        // Supervisors: η επιπλέον βάρδια πάει ΠΡΩΙ μαζί με τον πρωινό —
-        // απόγευμα μόνο ο ένας του slot 15:00-23:00 (13/07/2026)
-        shifts = [['07:00', '15:00'], ...FILLER_MORNING];
+        // Έξτρα/2ος supervisor: ΠΑΝΤΑ 08:00-16:00 (HARD — 18/07/2026).
+        // Τα σταθερά slots 07:00-15:00 & 16:00-24:00 μπαίνουν στη φάση απαιτήσεων.
+        shifts = [['08:00', '16:00']];
       } else {
         const alt = rule(a, 'weekly_alternation');
         const wantMorning =

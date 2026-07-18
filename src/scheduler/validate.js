@@ -41,7 +41,7 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
 
   const warnings = [];
   const uncovered = [];
-  const warn = (text, date) => warnings.push({ date: date || null, text });
+  const warn = (text, date, code) => warnings.push({ date: date || null, text, code: code || null });
 
   const work = (assignments || []).filter((a) => !a.off);
   const offs = (assignments || []).filter((a) => a.off);
@@ -105,7 +105,7 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
       // Ενδιαφέρουν μόνο ζεύγη που αγγίζουν την τρέχουσα εβδομάδα
       const touches = list[i].startAbs < weekEndAbs && list[i - 1].endAbs > weekStartAbs - 7 * 1440;
       if (gap < minRest && gap >= 0 && touches) {
-        warn(`Κ8: ${ag.name} — ανάπαυση μόνο ${(gap / 60).toFixed(1)}h (${list[i - 1].date} → ${list[i].date})`, list[i].date);
+        warn(`Κ8: ${ag.name} — ανάπαυση μόνο ${(gap / 60).toFixed(1)}h (${list[i - 1].date} → ${list[i].date})`, list[i].date, 'K8');
       }
     }
     // Αν δεν δόθηκαν αναθέσεις προηγούμενης εβδομάδας, χρησιμοποίησε την
@@ -115,7 +115,7 @@ async function validateWeek({ weekStart, assignments, prevAssignments, prevState
       if (cur && prevState[id].lastEndAbs != null && prevState[id].lastEndAbs !== -Infinity) {
         const gap = cur.startAbs - prevState[id].lastEndAbs;
         if (gap < minRest && gap >= 0) {
-          warn(`Κ8: ${ag.name} — ανάπαυση μόνο ${(gap / 60).toFixed(1)}h από την τελευταία βάρδια της προηγούμενης εβδομάδας`, cur.date);
+          warn(`Κ8: ${ag.name} — ανάπαυση μόνο ${(gap / 60).toFixed(1)}h από την τελευταία βάρδια της προηγούμενης εβδομάδας`, cur.date, 'K8');
         }
       }
     }
