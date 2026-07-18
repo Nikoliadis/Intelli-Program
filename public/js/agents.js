@@ -5,6 +5,7 @@
 
   let meta = { skills: [] };
   let editingId = null; // null = νέος agent
+  let canEditAgents = true; // δικαίωμα «Επεξεργασία agent» (από /api/me)
 
   const $ = (id) => document.getElementById(id);
 
@@ -39,6 +40,7 @@
     const d = await api('/api/me').catch(() => null);
     if (!d || !d.ok) return;
     $('userName').textContent = d.displayName;
+    canEditAgents = d.canEditAgents !== false; // δικαίωμα «Επεξεργασία agent»
   }
 
   $('logoutBtn').addEventListener('click', async () => {
@@ -95,7 +97,7 @@
         <td>${fixed || '<span class="muted">—</span>'}${extras.length ? '<br><span class="muted">' + extras.join(' · ') + '</span>' : ''}</td>
         <td style="max-width:340px"><span class="muted">${consText || '—'}</span></td>
         <td>
-          <button class="btn small" data-act="edit" data-id="${a.id}">Επεξεργασία</button>
+          ${canEditAgents ? `<button class="btn small" data-act="edit" data-id="${a.id}">Επεξεργασία</button>` : ''}
           ${a.active
             ? `<button class="btn small danger" data-act="deactivate" data-id="${a.id}">Απενεργ/ση</button>`
             : `<button class="btn small" data-act="activate" data-id="${a.id}">Ενεργοποίηση</button>`}

@@ -181,6 +181,11 @@ router.post('/', async (req, res) => {
 
 // PUT /api/agents/:id — ενημέρωση agent
 router.put('/:id', async (req, res) => {
+  // Δικαίωμα «Επεξεργασία agent» (18/07/2026): μπλοκάρεται server-side ώστε
+  // να μην παρακάμπτεται από το frontend
+  if (req.session && req.session.canEditAgents === false) {
+    return res.status(403).json({ ok: false, error: 'Δεν έχεις δικαίωμα επεξεργασίας agents.' });
+  }
   const errors = validateAgentPayload(req.body);
   if (errors.length) return res.status(400).json({ ok: false, error: errors.join('. ') });
 

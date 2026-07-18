@@ -19,7 +19,9 @@ router.post('/login', async (req, res) => {
     }
     req.session.userId = user.id;
     req.session.displayName = user.display_name || user.username;
-    res.json({ ok: true, displayName: req.session.displayName });
+    // Δικαίωμα επεξεργασίας agents (προεπιλογή: ναι· 0 = χωρίς δικαίωμα)
+    req.session.canEditAgents = user.can_edit_agents !== 0;
+    res.json({ ok: true, displayName: req.session.displayName, canEditAgents: req.session.canEditAgents });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
   }
@@ -33,7 +35,11 @@ router.post('/logout', (req, res) => {
 // GET /api/me — ποιος είναι συνδεδεμένος (για έλεγχο από το frontend)
 router.get('/me', (req, res) => {
   if (req.session && req.session.userId) {
-    return res.json({ ok: true, displayName: req.session.displayName });
+    return res.json({
+      ok: true,
+      displayName: req.session.displayName,
+      canEditAgents: req.session.canEditAgents !== false
+    });
   }
   res.status(401).json({ ok: false });
 });
