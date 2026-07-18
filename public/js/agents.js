@@ -41,6 +41,8 @@
     if (!d || !d.ok) return;
     $('userName').textContent = d.displayName;
     canEditAgents = d.canEditAgents !== false; // δικαίωμα «Επεξεργασία agent»
+    // Ίδιο δικαίωμα κρύβει και τη στήλη «Ιδιαιτερότητες» (18/07/2026)
+    document.body.classList.toggle('hide-constraints', !canEditAgents);
   }
 
   $('logoutBtn').addEventListener('click', async () => {
@@ -95,7 +97,7 @@
         <td>${skills || '<span class="muted">—</span>'}</td>
         <td>${night}</td>
         <td>${fixed || '<span class="muted">—</span>'}${extras.length ? '<br><span class="muted">' + extras.join(' · ') + '</span>' : ''}</td>
-        <td style="max-width:340px"><span class="muted">${consText || '—'}</span></td>
+        <td class="col-constraints" style="max-width:340px"><span class="muted">${consText || '—'}</span></td>
         <td>
           ${canEditAgents ? `<button class="btn small" data-act="edit" data-id="${a.id}">Επεξεργασία</button>` : ''}
           ${a.active

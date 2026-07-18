@@ -185,3 +185,6 @@ fieldset legend { font-size: .82rem; font-weight: 700; color: #56607a; padding: 
   z-index: 100;
 }
 #toast.show { opacity: 1; }
+
+/* Περιορισμένοι χρήστες: κρύψιμο στήλης «Ιδιαιτερότητες» (18/07/2026) */
+body.hide-constraints .col-constraints { display: none; }

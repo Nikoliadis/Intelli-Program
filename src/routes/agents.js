@@ -73,6 +73,11 @@ router.get('/', async (req, res) => {
                  ORDER BY full_name`;
     const [rows] = await pool.query(sql, params);
     const agents = await attachDetails(rows.map(parseAgent));
+    // Περιορισμένοι χρήστες (χωρίς δικαίωμα επεξεργασίας): δεν βλέπουν τις
+    // Ιδιαιτερότητες — αφαιρούνται και από το API, όχι μόνο από το UI (18/07/2026)
+    if (req.session && req.session.canEditAgents === false) {
+      for (const a of agents) a.constraints = [];
+    }
     res.json({ ok: true, agents });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -85,6 +90,7 @@ router.get('/:id', async (req, res) => {
     const [rows] = await pool.query('SELECT * FROM agents WHERE id = ?', [req.params.id]);
     if (!rows[0]) return res.status(404).json({ ok: false, error: 'Δεν βρέθηκε ο agent' });
     const [agent] = await attachDetails([parseAgent(rows[0])]);
+    if (req.session && req.session.canEditAgents === false) agent.constraints = [];
     res.json({ ok: true, agent });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
