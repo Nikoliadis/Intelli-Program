@@ -1,195 +1,204 @@
-# Πρόγραμμα Βαρδιών — Intelli Program
+# Shift Scheduler — Intelli Program
 
-Εφαρμογή αυτόματης δημιουργίας **εβδομαδιαίου προγράμματος βαρδιών** για call center.
-Παράγει πρόγραμμα που σέβεται εργατική νομοθεσία (11ωρη ανάπαυση, όχι 6ήμερο),
-τις απαιτήσεις κάλυψης ανά project, και τις ιδιαιτερότητες κάθε εργαζόμενου —
-με χειροκίνητη διόρθωση και εξαγωγή/εισαγωγή Excel.
+***English** · [Ελληνικά](README.el.md)*
+
+Automated **weekly shift scheduling** for a call center. Generates rosters that
+respect labour law (11-hour rest, no 6-day weeks), per-project coverage
+requirements and each employee's individual constraints — with manual editing
+and Excel import/export.
 
 🔗 **Live:** https://intelli-program-production.up.railway.app
 
 ---
 
-## Τι κάνει
+## What it does
 
-- **Αυτόματη παραγωγή** προγράμματος για ολόκληρη περίοδο (πολλές εβδομάδες μαζί),
-  με μεταφορά κατάστασης από εβδομάδα σε εβδομάδα (σερί ημερών, ώρες ανάπαυσης).
-- **Διαχείριση agents**: τμήματα, δεξιότητες, σταθερά ωράρια, ιδιαιτερότητες, άδειες.
-- **Χειροκίνητη επεξεργασία** του παραγόμενου προγράμματος με **live έλεγχο κανόνων**
-  (και μπλοκάρισμα όταν παραβιάζεται το 11ωρο).
-- **Excel export** στο ακριβές στυλ του γραφείου (χρώματα, ομαδοποίηση ρόλων).
-- **Excel import**: ανεβάζεις προηγούμενη εβδομάδα και ο generator τη λαμβάνει υπόψη
-  στα σύνορα (ποιος δούλεψε 5 σερί → ρεπό τη Δευτέρα).
-- **Χρήστες με δικαιώματα** (πλήρη / περιορισμένα).
+- **Automatic generation** for a whole period (multiple weeks at once), carrying
+  state from one week to the next (consecutive-day streaks, rest hours).
+- **Agent management**: departments, skills, fixed shifts, individual
+  constraints, leave.
+- **Manual editing** of the generated roster with **live rule validation**
+  (and a hard block when the 11-hour rest would be violated).
+- **Excel export** matching the office's exact style (colours, role grouping).
+- **Excel import**: upload a previous week and the generator takes it into
+  account at the boundaries (who worked 5 days straight → day off on Monday).
+- **Users with permissions** (full / restricted).
 
-## Τεχνολογίες
+## Tech stack
 
 Node.js + Express · MariaDB/MySQL (mysql2) · vanilla JS frontend · ExcelJS ·
-express-session (sessions στη βάση) · bcryptjs · helmet · express-rate-limit
+express-session (sessions stored in the database) · bcryptjs · helmet ·
+express-rate-limit
 
 ---
 
-## Γρήγορη εκκίνηση (τοπικά)
+## Quick start (local)
 
-Προϋποθέσεις: **Node.js ≥ 20** και **XAMPP** (MySQL/MariaDB) σε λειτουργία.
+Requirements: **Node.js ≥ 20** and a running **MySQL/MariaDB** (e.g. XAMPP).
 
 ```bash
 npm install
-npm run setup     # δημιουργεί πίνακες (migrate) + αρχικά δεδομένα (seed)
+npm run setup     # creates tables (migrate) + initial data (seed)
 npm run dev       # http://localhost:3000
 ```
 
-Αρχικός χρήστης μετά το seed: **admin / admin** (άλλαξέ τον αμέσως, βλ. Scripts).
+Initial user after seeding: **admin / admin** — change it immediately (see Scripts).
 
-## Μεταβλητές περιβάλλοντος
+## Environment variables
 
-Όλες προαιρετικές τοπικά — υπάρχουν λογικές προεπιλογές για XAMPP.
+All optional locally — sensible defaults for a local XAMPP setup.
 
-| Μεταβλητή | Περιγραφή |
+| Variable | Description |
 |---|---|
-| `DATABASE_URL` / `MYSQL_URL` | Πλήρες connection string (το Railway το δίνει έτοιμο). Έχει προτεραιότητα. |
-| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Ξεχωριστά στοιχεία σύνδεσης (προεπιλογή: `localhost` / `root` / `programa_vardion`). |
-| `SESSION_SECRET` | Μυστικό υπογραφής session cookie. **Υποχρεωτικό στην παραγωγή.** |
-| `NODE_ENV` | `production` στο cloud — ενεργοποιεί `secure` cookies. |
-| `PORT` | Θύρα του server (προεπιλογή 3000). |
+| `DATABASE_URL` / `MYSQL_URL` | Full connection string (Railway provides one). Takes precedence. |
+| `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Individual connection settings (defaults: `localhost` / `root` / `programa_vardion`). |
+| `SESSION_SECRET` | Secret used to sign the session cookie. **Required in production.** |
+| `NODE_ENV` | `production` in the cloud — enables `secure` cookies. |
+| `PORT` | Server port (default 3000). |
 
 ## Scripts
 
 ```bash
-npm run dev        # ανάπτυξη με auto-reload (nodemon)
-npm start          # παραγωγή
-npm run migrate    # δημιουργία/ενημέρωση πινάκων
-npm run seed       # αρχικά δεδομένα (agents, απαιτήσεις, ρόλοι, χρήστης admin)
-npm run setup      # migrate + seed μαζί
+npm run dev        # development with auto-reload (nodemon)
+npm start          # production
+npm run migrate    # create/update tables
+npm run seed       # initial data (agents, requirements, roles, admin user)
+npm run setup      # migrate + seed together
 
-# Έλεγχος κανόνων του generator για έναν μήνα (23 έλεγχοι)
+# Validate the generator's rules over one month (23 checks)
 node scripts/test_generator.js 2026-07
 
-# Διαχείριση χρηστών
-node scripts/set_password.js <username> <νέος-κωδικός>
-node scripts/create_user.js <username> <κωδικός> [όνομα] [--no-edit-agents]
+# User management
+node scripts/set_password.js <username> <new-password>
+node scripts/create_user.js <username> <password> [displayName] [--no-edit-agents]
 ```
 
-> Τα scripts τρέχουν και προς τη βάση παραγωγής βάζοντας `DATABASE_URL=...` μπροστά.
+> Prefix any script with `DATABASE_URL=...` to run it against the production database.
 
 ---
 
-## Οθόνες
+## Screens
 
-| Οθόνη | Διαδρομή | Τι κάνει |
+| Screen | Path | Purpose |
 |---|---|---|
-| **Agents** | `/` | Λίστα/CRUD εργαζομένων, δεξιότητες, ιδιαιτερότητες, απενεργοποίηση (soft delete). |
-| **Περίοδος** | `/period.html` | Ορισμός περιόδου (στρογγυλοποίηση σε Δευτέρα–Κυριακή), άδειες & αιτήματα ρεπό. |
-| **Έλεγχος Excel** | `/import.html` | Ανεβάζεις Excel εβδομάδας → βλέπεις **ανά agent** τι διαβάστηκε + το σερί που μεταφέρεται. Preview χωρίς αποθήκευση. |
-| **Πρόγραμμα** | `/schedule.html` | Παραγωγή (SOS), προεπισκόπηση ανά εβδομάδα, χειροκίνητες αλλαγές με live έλεγχο, εξαγωγή Excel. |
+| **Agents** | `/` | List/CRUD of employees, skills, constraints, deactivation (soft delete). |
+| **Period** | `/period.html` | Define the period (rounded to Monday–Sunday), leave and day-off requests. |
+| **Excel check** | `/import.html` | Upload a week's Excel → see **per agent** what was parsed plus the streak carried forward. Preview without saving. |
+| **Schedule** | `/schedule.html` | Generate, preview per week, edit manually with live validation, export to Excel. |
 
-Ροή εργασίας: **Agents → Περίοδος → Έλεγχος Excel → Πρόγραμμα**
+Workflow: **Agents → Period → Excel check → Schedule**
 
 ---
 
-## Κανόνες προγραμματισμού
+## Scheduling rules
 
-### Hard (δεν παραβιάζονται ποτέ)
+### Hard constraints (never violated)
 
-| | Κανόνας |
+| | Rule |
 |---|---|
-| **Κ1** | Κάθε απαίτηση κάλυψης καλύπτεται από agent με τον αντίστοιχο ρόλο/δεξιότητα. |
-| **Κ2** | 1 βάρδια/ημέρα, 5 εργάσιμες + **ακριβώς 2 ρεπό**/εβδομάδα. |
-| **Κ3** | Ιδιαιτερότητες ανά agent (σχολή, σταθερά ωράρια, μόνο πρωί/απόγευμα, τηλεργασία, σπαστά). |
-| **Κ4** | Νυχτερινή 23:00 ή 23:30 ανάλογα με το αν κάποιος ανοίγει 07:00/07:30. |
-| **Κ5** | Σταθερά («κλειδωμένα») ωράρια τηρούνται πάντα. |
-| **Κ6** | Agent σε άδεια δεν προγραμματίζεται. |
-| **Κ7** | Νυχτερινές μόνο σε agents με `can_night`. |
-| **Κ8** | **Ανάπαυση ≥ 11 ώρες** μεταξύ βαρδιών — ελέγχεται και στα σύνορα εβδομάδων. |
-| **Κ9** | Η 19:00–03:00 μόνο από λίστα επιλεξιμότητας, με όριο φορών/εβδομάδα. |
-| **Κ10** | **Απαγορεύεται 6ήμερο** — έως 5 συνεχόμενες ημέρες, μετά υποχρεωτικά ρεπό. |
+| **K1** | Every coverage requirement is filled by an agent with the matching role/skill. |
+| **K2** | 1 shift per day, 5 working days + **exactly 2 days off** per week. |
+| **K3** | Per-agent constraints (studies, fixed shifts, mornings/afternoons only, remote work, split shifts). |
+| **K4** | Night shift starts 23:00 or 23:30 depending on whether someone opens at 07:00/07:30. |
+| **K5** | Fixed ("locked") shifts are always honoured. |
+| **K6** | An agent on leave is never scheduled. |
+| **K7** | Night shifts only for agents flagged `can_night`. |
+| **K8** | **At least 11 hours of rest** between shifts — enforced across week boundaries too. |
+| **K9** | The 19:00–03:00 shift only from an eligibility list, with a weekly cap per agent. |
+| **K10** | **No 6-day stretches** — at most 5 consecutive days, then a mandatory day off. |
 
-### Soft (προτιμήσεις με σειρά προτεραιότητας)
+### Soft constraints (preferences, in priority order)
 
-- **Σ1** Παρασκευή 06:00–14:00: Νικολιάδης + Νικολιάδη μαζί, αν βγαίνει.
-- **Σ2** Τα 2 ρεπό **συνεχόμενα** (εκτός αιτημάτων/εξαιρέσεων).
-- **Σ3** Δίκαιη εναλλαγή νυχτερινών, Σαββατοκύριακων και Κυριακών.
-- **Σ4** Συνέπεια ωραρίου μέσα στην εβδομάδα (όχι πρωί–βράδυ–πρωί).
-- **Σ5** Νικολιάδη Αλίκη: μόνο πρωινή 07:30/08:00.
+- **S1** Friday 06:00–14:00: pair the two remote-eligible agents together when feasible.
+- **S2** The 2 days off should be **consecutive** (unless requested otherwise, or blocked).
+- **S3** Fair rotation of night shifts, weekends and Sundays.
+- **S4** Consistent shift times within a week (avoid morning–night–morning).
+- **S5** Agents restricted to mornings keep their allowed start times.
 
-### Πρόσθετοι κανόνες λειτουργίας
+### Additional operational rules
 
-- **Σαββατοκύριακα**: τα νούμερα του πίνακα είναι ταυτόχρονα **MAX και MIN**
-  (2 Eurobank πρωί/απόγευμα, 2 Alpha πρωί/απόγευμα, 1 Πειραιώς 06:00–14:00,
-  1 Πειραιώς απόγευμα, 1 Verification πρωί, 1 Verification απόγευμα).
-- **Supervisors**: **μόνο** 07:00–15:00 και 16:00–24:00· ο επιπλέον/2ος **πάντα** 08:00–16:00.
-  Πάντα ένας πρωί κι ένας απόγευμα, Δευτέρα–Κυριακή.
-- **Νυχτερινές**: έως 2/εβδομάδα, μόνο συνεχόμενες, με ισάριθμα ρεπό ανάπαυσης μετά.
-- **Κυριακές**: έως 2/μήνα ανά agent — με εξαίρεση όταν μια θέση Κυριακής είναι ο
-  μόνος τρόπος να έχει ο agent **ακριβώς 2 ρεπό**.
-- **Εισηγμένες εβδομάδες** (από Excel) θεωρούνται **δεδομένη πραγματικότητα**:
-  δεν ξαναπαράγονται και τροφοδοτούν τους ελέγχους Κ8/Κ10 προς τα εμπρός και πίσω.
+- **Weekends**: the headcounts are both **MAX and MIN** (2 Eurobank morning /
+  afternoon, 2 Alpha morning / afternoon, 1 Piraeus 06:00–14:00, 1 Piraeus
+  afternoon, 1 Verification morning, 1 Verification afternoon).
+- **Supervisors**: **only** 07:00–15:00 and 16:00–24:00; any extra/second
+  supervisor is **always** 08:00–16:00. One morning and one afternoon
+  supervisor every day, Monday–Sunday.
+- **Night shifts**: max 2 per week, consecutive only, followed by an equal
+  number of rest days.
+- **Sundays**: max 2 per month per agent — except when a Sunday slot is the only
+  way for that agent to end up with **exactly 2 days off**.
+- **Imported weeks** (from Excel) are treated as **established fact**: they are
+  never regenerated and they feed the K8/K10 checks both forwards and backwards.
 
 ---
 
 ## Excel
 
-- **Εξαγωγή**: ανά εβδομάδα ή ολόκληρη περίοδο, πιστό στο στυλ του γραφείου
-  (ωριαίες ζώνες κάθετα, μέρες οριζόντια, χρώματα ανά ρόλο, ομαδοποίηση στηλών).
-- **Εισαγωγή**: αναγνωρίζει τα μπλοκ ημερών από τα χρώματα, αντιστοιχίζει ονόματα
-  (με ανοχή σε τυπογραφικά), ενώνει νυχτερινές που περνούν τα μεσάνυχτα.
-  Χρησιμοποίησε την οθόνη **Έλεγχος Excel** για επαλήθευση πριν την αποθήκευση.
+- **Export**: per week or for a whole period, faithful to the office's layout
+  (hourly bands vertically, days horizontally, colour per role, grouped columns).
+- **Import**: detects day blocks from the fill colours, matches names (tolerant
+  of typos) and merges night shifts that cross midnight. Use the **Excel check**
+  screen to verify the parse before saving.
 
-## Χρήστες & δικαιώματα
+## Users & permissions
 
-Πίνακας `users` με στήλη `can_edit_agents`:
+The `users` table has a `can_edit_agents` column:
 
-- **Πλήρη δικαιώματα** (`1`, προεπιλογή) — όλα.
-- **Περιορισμένα** (`0`) — δεν βλέπει το κουμπί «Επεξεργασία» στους agents
-  (μπλοκάρεται και server-side) και **δεν βλέπει** τη στήλη «Ιδιαιτερότητες»
-  (αφαιρείται από το API, όχι μόνο από το UI).
+- **Full access** (`1`, default) — everything.
+- **Restricted** (`0`) — the "Edit" button on agents is hidden (and blocked
+  server-side), and the "Constraints" column is **not visible** (stripped from
+  the API response, not merely hidden in the UI).
 
 ```bash
-node scripts/create_user.js xamira 'κωδικός' 'Όνομα' --no-edit-agents
+node scripts/create_user.js someuser 'password' 'Display Name' --no-edit-agents
 ```
 
-## Ασφάλεια
+## Security
 
-- Κωδικοί με **bcrypt**· sessions αποθηκευμένα **στη βάση** (επιβιώνουν restart).
-- Cookies `HttpOnly` + `SameSite=Lax` + `Secure` (στην παραγωγή).
-- **helmet**: αυστηρό CSP (καμία inline JS), HSTS, anti-clickjacking, nosniff.
-- **Rate limiting** στο login: 10 αποτυχημένες προσπάθειες/IP ανά 15 λεπτά.
-- Παραμετροποιημένα SQL queries παντού (χωρίς SQL injection).
-- Στην παραγωγή η βάση **δεν είναι εκτεθειμένη** στο διαδίκτυο — μόνο εσωτερικό δίκτυο.
+- Passwords hashed with **bcrypt**; sessions stored **in the database** (they
+  survive restarts and redeploys).
+- Cookies are `HttpOnly` + `SameSite=Lax` + `Secure` (in production).
+- **helmet**: strict CSP (no inline JS at all), HSTS, anti-clickjacking, nosniff.
+- **Rate limiting** on login: 10 failed attempts per IP per 15 minutes.
+- Parameterised SQL queries throughout (no SQL injection).
+- In production the database is **not exposed to the internet** — private
+  network only.
 
 ## Deployment
 
-Αναλυτικές οδηγίες για **Railway** (με μεταφορά δεδομένων): **[DEPLOY.md](DEPLOY.md)**
+Step-by-step **Railway** instructions (including data migration):
+**[DEPLOY.md](DEPLOY.md)**
 
-Με κάθε `git push` το Railway κάνει redeploy αυτόματα.
+Every `git push` triggers an automatic redeploy.
 
 ---
 
-## Δομή project
+## Project layout
 
 ```
 src/
-  server.js            Express app, ασφάλεια, sessions, routes
+  server.js            Express app, security, sessions, routes
   db/                  config, pool, migrate, seed
   routes/              auth, agents, meta, period, schedule, export, import
   scheduler/
-    index.js           generatePeriod — παραγωγή πολλών εβδομάδων με μεταφορά κατάστασης
-    engine.js          ο αλγόριθμος (φάσεις: κλείδωμα → νυχτερινές → απαιτήσεις → ρεπό → fillers)
-    validate.js        έλεγχοι κανόνων (live validation & κατάσταση συνόρων)
-    context.js         φόρτωση δεδομένων από τη βάση
+    index.js           generatePeriod — multi-week generation carrying state forward
+    engine.js          the algorithm (phases: lock → nights → requirements → days off → fillers)
+    validate.js        rule checks (live validation & boundary state)
+    context.js         loads everything the generator needs from the database
   middleware/auth.js   requireAuth
-  utils/dates.js       βοηθητικά ημερομηνιών/εβδομάδων
-public/                frontend (HTML + vanilla JS ανά οθόνη)
+  utils/dates.js       date/week helpers
+public/                frontend (HTML + vanilla JS per screen)
 scripts/               test_generator, set_password, create_user
-SPEC_Programma_Vardion.md   Η προδιαγραφή (πηγή αλήθειας για τους κανόνες)
+SPEC_Programma_Vardion.md   The specification (source of truth for the rules)
 ```
 
-## Έλεγχοι
+## Tests
 
 ```bash
 node scripts/test_generator.js 2026-07
 ```
 
-Τρέχει 23 ελέγχους πάνω σε πραγματική παραγωγή μήνα: Κ2/Κ8/Κ10, νυχτερινές,
-19:00–03:00, ΣΚ MAX/MIN, όρια Κυριακών, supervisors, λίστα 06:00–14:00 κ.ά.
-Οι εισηγμένες εβδομάδες εξαιρούνται (είναι δεδομένα, όχι παραγωγή) — ελέγχονται
-μόνο τα σύνορά τους.
+Runs 23 checks against a real month's generated output: K2/K8/K10, night shifts,
+19:00–03:00, weekend MAX/MIN, Sunday caps, supervisors, the 06:00–14:00
+eligibility list and more. Imported weeks are excluded (they are data, not
+output) — only their boundaries are checked.
