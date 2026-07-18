@@ -3,3 +3,5 @@ node_modules/
 .env
 Weekly_Program_*.xlsx
 Period_Program_*.xlsx
+dump.sql
+*.sql

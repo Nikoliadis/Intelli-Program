@@ -11,10 +11,14 @@
     "setup": "node src/db/migrate.js && node src/db/seed.js"
   },
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "exceljs": "^4.4.0",
     "express": "^4.21.2",
+    "express-mysql-session": "^3.0.3",
     "express-session": "^1.18.1",
     "mysql2": "^3.14.0"
   },
