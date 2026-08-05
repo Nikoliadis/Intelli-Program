@@ -1016,7 +1016,11 @@ function phaseRequirements(w, reqByDay, opts = {}) {
           // άθελά του με 2ο ρεπό Κυριακής τον μήνα
           if (d === 6 && rule(a, 'sunday_worker')) score += 40;
           // Προτιμήσεις πρωί/απόγευμα (soft)
-          if (rule(a, 'prefer_morning')) score += isMorning(shS, shE) ? 5 : -6;
+          // prefer_morning: soft (+5/-6). Με `strong:true` (π.χ. Ρίζου 18/07/2026)
+          // πολύ δυνατή προτίμηση — απόγευμα μόνο ως έσχατη λύση όταν δεν βγαίνει
+          // αλλιώς η κάλυψη (soft, ΟΧΙ hard — μπορεί ~1 στις 4 βδομάδες απόγευμα).
+          const pm = rule(a, 'prefer_morning');
+          if (pm) score += isMorning(shS, shE) ? (pm.strong ? 20 : 5) : (pm.strong ? -250 : -6);
           if (rule(a, 'prefer_afternoon')) score += isAfternoon(shS) ? 5 : -6;
           // Διατήρηση ευελιξίας: όσοι μπορούν ΜΟΝΟ αυτό το είδος βάρδιας
           // προηγούνται, ώστε οι ευέλικτοι να μένουν για τις υπόλοιπες
