@@ -24,6 +24,13 @@ function rule(agent, type) {
   return agent.rules.find((r) => r.type === type) || null;
 }
 
+// «Βραδινή» βάρδια = έναρξη 19:00 και μετά (19:00-03:00, 23:00-07:00,
+// 23:30-07:30) — διακριτή από την «απογευματινή» (isAfternoon: 12:00-18:59).
+// Χρησιμοποιείται από τον soft κανόνα prefer_morning_evening (05/09/2026).
+function isEveningStart(start) {
+  return toMin(start) >= 1140;
+}
+
 // Έλεγχος τμήματος απαίτησης: 'verification+call' σημαίνει ότι ο agent
 // πρέπει να έχει ΚΑΙ τα δύο τμήματα (π.χ. Verification & call slots —
 // απόφαση προϊσταμένου 10/07/2026: τα κάνει ΜΟΝΟ όποιος έχει ταμπέλα call).
@@ -259,7 +266,9 @@ function shiftAllowedByRules(agent, d, start, end, opts = {}) {
         if (!isAfternoon(start)) return false;
         break;
       case 'allowed_shifts':
-        if (opts.override1903) break;
+        // `strict: true` (Αγγλόγαλλος, Καλαφάτη — 05/09/2026): η λίστα είναι
+        // ΑΠΟΛΥΤΗ και δεν παρακάμπτεται ούτε από το Κ9 (19:00-03:00).
+        if (opts.override1903 && !r.strict) break;
         if (!r.shifts.some(([rs, re]) => rs === start && re === end)) return false;
         break;
       case 'split_shift':
@@ -589,6 +598,18 @@ function phaseNights(w, nightReqByDay) {
   const euro = ctx.roles.get('Eurobank') || { id: null, color: null };
   const nightsIn = (plan) => plan.days.filter((e) => e && e.type === 'work' && e.night).length;
 
+  // Ωράριο νυχτερινής για τον συγκεκριμένο agent: κανονικά 23:30-07:30
+  // (οριστικοποιείται στη φάση 8 σε 23:00-07:00 αν δεν ανοίγει κανείς το
+  // πρωί). Για agents με ΑΠΟΛΥΤΗ λίστα ωραρίων που περιέχει μόνο την
+  // 23:00-07:00 (Αγγλόγαλλος, Καλαφάτη — 05/09/2026) μπαίνει αυτή ακριβώς,
+  // ώστε να μη χάνουν τη δυνατότητα νυχτερινής ούτε να παίρνουν ωράριο
+  // εκτός της λίστας τους.
+  const nightShiftFor = (plan, d) => {
+    if (canPlace(w, plan, d, '23:30', '07:30')) return ['23:30', '07:30'];
+    if (canPlace(w, plan, d, '23:00', '07:00')) return ['23:00', '07:00'];
+    return null;
+  };
+
   // Ευθυγράμμιση με ΑΙΤΗΜΑΤΑ ΡΕΠΟ (14/07/2026): η υποχρεωτική ανάπαυση μετά
   // τα βράδια πρέπει να ΠΕΦΤΕΙ ΠΑΝΩ στο ζητημένο ρεπό — π.χ. αίτημα Παρασκευή
   // → βράδια Τρίτη+Τετάρτη → ρεπό Πέμπτη+Παρασκευή = σύνολο 2 ρεπό, όχι 3.
@@ -621,7 +642,7 @@ function phaseNights(w, nightReqByDay) {
         // Η ανάπαυση μετά το βράδυ πρέπει να χωράει: η επόμενη μέρα (αν είναι
         // μέσα στην εβδομάδα) να μην έχει ήδη βάρδια
         if (d + 1 < 7 && plan.days[d + 1] && plan.days[d + 1].type === 'work') return false;
-        return canPlace(w, plan, d, '23:30', '07:30');
+        return !!nightShiftFor(plan, d);
       })
       .sort((x, y) => {
         // Προτίμησε να «κλείσει» ζευγάρι με τον χθεσινό νυχτερινό — αλλιώς
@@ -642,6 +663,11 @@ function phaseNights(w, nightReqByDay) {
         const costX = w.plans.get(x.id).days.filter((e) => e && ((e.type === 'work' && e.night) || (e.type === 'off' && e.reason === 'night_rest'))).length;
         const costY = w.plans.get(y.id).days.filter((e) => e && ((e.type === 'work' && e.night) || (e.type === 'off' && e.reason === 'night_rest'))).length;
         if (costX !== costY) return costX - costY;
+        // Ισοβαθμία: προηγείται όποιος ΠΡΟΤΙΜΑ τις βραδινές (ALIGIA LORENTSO —
+        // 05/09/2026). Κριτήριο ισοβαθμίας, δεν ανατρέπει τα παραπάνω.
+        const evX = rule(x, 'prefer_morning_evening') ? 0 : 1;
+        const evY = rule(y, 'prefer_morning_evening') ? 0 : 1;
+        if (evX !== evY) return evX - evY;
         return agentState(w, x.id).nights - agentState(w, y.id).nights;
       });
 
@@ -655,8 +681,9 @@ function phaseNights(w, nightReqByDay) {
     }
     // Κ4: προσωρινά 23:30-07:30 — οριστικοποιείται σε post-pass βάσει του
     // ποιος πραγματικά ανοίγει το επόμενο πρωί στις 07:00/07:30
+    const nsh = nightShiftFor(w.plans.get(a.id), d);
     place(w, w.plans.get(a.id), d, {
-      start: '23:30', end: '07:30', skill: 'EUROBANK', label: 'ΝΥΧΤΕΡΙΝΗ',
+      start: nsh[0], end: nsh[1], skill: 'EUROBANK', label: 'ΝΥΧΤΕΡΙΝΗ',
       location: 'office', night: true, roleName: 'Eurobank', roleId: euro.id, color: euro.color,
       reqLabel: 'Νυχτερινή Eurobank'
     });
@@ -1022,6 +1049,13 @@ function phaseRequirements(w, reqByDay, opts = {}) {
           const pm = rule(a, 'prefer_morning');
           if (pm) score += isMorning(shS, shE) ? (pm.strong ? 20 : 5) : (pm.strong ? -250 : -6);
           if (rule(a, 'prefer_afternoon')) score += isAfternoon(shS) ? 5 : -6;
+          // ALIGIA LORENTSO (05/09/2026): προτιμώνται ΠΡΩΙΝΕΣ και ΒΡΑΔΙΝΕΣ,
+          // οι απογευματινές όσο γίνεται λιγότερες. SOFT — δεν αποκλείει την
+          // απογευματινή όταν δεν βγαίνει αλλιώς η κάλυψη.
+          if (rule(a, 'prefer_morning_evening')) {
+            if (isMorning(shS, shE) || isEveningStart(shS)) score += 15;
+            else if (isAfternoon(shS)) score -= 45;
+          }
           // Διατήρηση ευελιξίας: όσοι μπορούν ΜΟΝΟ αυτό το είδος βάρδιας
           // προηγούνται, ώστε οι ευέλικτοι να μένουν για τις υπόλοιπες
           if (isMorning(shS, shE) && rule(a, 'only_morning')) score += 14;
@@ -1161,6 +1195,8 @@ function phase1903(w, reqByDay, opts = {}) {
       // Ρίζου: προτίμησέ την τις εβδομάδες απογεύματος
       if (rule(a, 'weekly_alternation') && st.rizouMode === 'morning') score -= 25;
       score += (workTarget(plan) - assignedCount(plan)) * 4;
+      // Προτίμηση βραδινών (ALIGIA LORENTSO — 05/09/2026)
+      if (rule(a, 'prefer_morning_evening')) score += 15;
       // Κυριακή: εναλλαγή ώστε κανείς να μην «καίει» το όριο 2 Κυριακών/μήνα
       if (d === 6) score -= ((st.sundays || {})[w.dates[6].slice(0, 7)] || 0) * 15;
       cands.push({ a, el, score });
@@ -1248,6 +1284,9 @@ function phaseFillers(w, reqByDay) {
           rule(a, 'only_morning') ? true :
           rule(a, 'only_afternoon') || rule(a, 'allowed_shifts') ? false :
           alt ? agentState(w, a.id).rizouMode === 'morning' :
+          // ALIGIA LORENTSO (05/09/2026): στα fillers πρωί — οι βραδινές
+          // βάρδιες δίνονται μόνο από τις φάσεις απαιτήσεων/νυχτερινών
+          rule(a, 'prefer_morning_evening') ? true :
           rule(a, 'prefer_afternoon') ? false :
           rule(a, 'prefer_morning') ? true :
           // Σ4: ακολούθησε ό,τι κάνει ήδη μέσα στην εβδομάδα
@@ -1255,7 +1294,10 @@ function phaseFillers(w, reqByDay) {
 
         const allowed = rule(a, 'allowed_shifts');
         if (allowed) {
-          shifts = allowed.shifts;
+          // Οι νυχτερινές της λίστας (π.χ. 23:00-07:00) ΔΕΝ μπαίνουν ως
+          // filler: ανατίθενται αποκλειστικά από τη φάση 3, που κρατά και τη
+          // λογιστική τους (όριο 2/εβδομάδα + υποχρεωτική ανάπαυση μετά).
+          shifts = allowed.shifts.filter(([s, e]) => !isNight(s, e));
         } else {
           shifts = wantMorning ? [...FILLER_MORNING, ...FILLER_AFTERNOON] : [...FILLER_AFTERNOON, ...FILLER_MORNING];
         }
@@ -1446,6 +1488,137 @@ function phasePairReport(w) {
   }
 }
 
+// ==================== ΦΑΣΗ 10: ΤΕΛΙΚΟΣ ΕΛΕΓΧΟΣ 6ΗΜΕΡΟΥ ====================
+// (05/09/2026) Δίχτυ ασφαλείας ΠΡΙΝ βγει το πρόγραμμα: κανένας εργαζόμενος
+// δεν πρέπει να καταλήγει με εξαήμερη εργασία. Ο έλεγχος γίνεται σε επίπεδο
+// ΗΜΕΡΩΝ ΕΡΓΑΣΙΑΣ (όχι αριθμού βαρδιών — μια μέρα με σπαστό ωράριο μετρά
+// ΜΙΑ φορά) και έχει δύο σκέλη:
+//   α) ημέρες εργασίας μέσα στην εβδομάδα ≤ στόχο (Κ2: 5 μείον οι άδειες)
+//   β) συνεχόμενες ημέρες εργασίας ≤ 5 (Κ10) ΜΑΖΙ με τις ημέρες που
+//      κουβαλάει ο εργαζόμενος από την ΠΡΟΗΓΟΥΜΕΝΗ εβδομάδα (state.streak —
+//      υπολογίζεται και από το Excel που ανεβάζει ο χρήστης, μέσω του
+//      computeStateFromAssignments) και από την ΕΠΟΜΕΝΗ όταν είναι γνωστή.
+// Ό,τι βρεθεί διορθώνεται αφαιρώντας ΜΟΝΟ βάρδιες που τοποθέτησε ο
+// generator — τα σταθερά ωράρια (Κ5), οι άδειες και τα αιτήματα ρεπό δεν
+// αγγίζονται. Αν δεν υπάρχει τίποτα αφαιρέσιμο, ο κανόνας ΔΕΝ παρακάμπτεται:
+// το πρόβλημα αναφέρεται στον χρήστη μέσω του report (uncovered/soft).
+
+// Αφαίρεση βάρδιας μέρας d → η μέρα γίνεται ρεπό. Επιστρέφει false αν η
+// βάρδια είναι κλειδωμένη (σταθερό ωράριο/σπαστό/μοτίβο) ή δεν υπάρχει.
+function dropShiftForSixDay(w, plan, d, reason) {
+  const e = plan.days[d];
+  if (!e || e.type !== 'work' || e.fixed) return false;
+
+  plan.days[d] = { type: 'off', reason: 'repo' };
+  if (e.location === 'home' && plan.teleworkDays > 0) plan.teleworkDays--;
+
+  // Λογιστική που κρατιέται εκτός plan.days (μετρητές κατάστασης)
+  const st = agentState(w, plan.agent.id);
+  if (e.night) st.nights = Math.max(0, st.nights - 1);
+  if (e.start === '19:00' && e.end === '03:00') {
+    st.count1903 = Math.max(0, st.count1903 - 1);
+    plan.elig1903Used = Math.max(0, plan.elig1903Used - 1);
+  }
+
+  // Η θέση που άδειασε ξαναγίνεται ακάλυπτη απαίτηση (ορατό στο UI)
+  if (e.reqLabel) {
+    w.report.uncovered.push({
+      date: w.dates[d], start: e.start, end: e.end, label: e.reqLabel, missing: 1
+    });
+  }
+  w.report.soft.push(
+    `6ήμερο: ${plan.agent.name} — αφαιρέθηκε η βάρδια ${w.dates[d]} ${e.start}-${e.end} (${reason}).`
+  );
+  return true;
+}
+
+// Σπάσιμο σειράς συνεχόμενων ημερών που τελειώνει στη μέρα lastDay:
+// αφαιρείται ΜΙΑ βάρδια μέσα στη σειρά, ξεκινώντας από το τέλος και
+// προτιμώντας τις βάρδιες συμπλήρωσης (fillers) έναντι αυτών που καλύπτουν
+// δηλωμένη απαίτηση.
+function cutSixDayStreak(w, plan, lastDay, reason) {
+  let first = lastDay;
+  while (first > 0 && countsAsWork(plan, first - 1)) first--;
+  for (const fillersOnly of [true, false]) {
+    for (let d = lastDay; d >= first; d--) {
+      const e = plan.days[d];
+      if (!e || e.type !== 'work' || e.fixed) continue;
+      if (fillersOnly && !e.filler) continue;
+      if (dropShiftForSixDay(w, plan, d, reason)) return true;
+    }
+  }
+  return false;
+}
+
+function phaseSixDayAudit(w) {
+  const { ctx } = w;
+  for (const a of ctx.agents) {
+    const plan = w.plans.get(a.id);
+    // Δηλωμένες εξαιρέσεις 6ημέρου (Τσιτσικώστες — 11/07/2026)
+    if (rule(a, 'no_streak_limit') || rule(a, 'weekly_pattern')) continue;
+    const st = agentState(w, a.id);
+
+    // --- α) Ημέρες εργασίας μέσα στην εβδομάδα ---
+    const target = workTarget(plan);
+    for (let guard = 0; guard < 7; guard++) {
+      const days = [];
+      for (let d = 0; d < 7; d++) if (worked(plan, d)) days.push(d);
+      if (days.length <= target) break;
+      let cut = false;
+      for (let i = days.length - 1; i >= 0 && !cut; i--) {
+        cut = dropShiftForSixDay(
+          w, plan, days[i],
+          `${days.length} ημέρες εργασίας στην εβδομάδα, όριο ${target}`
+        );
+      }
+      if (!cut) {
+        w.report.soft.push(
+          `ΠΡΟΣΟΧΗ 6ήμερο: ${a.name} — ${days.length} ημέρες εργασίας (όριο ${target}) και όλες οι βάρδιες είναι κλειδωμένες (σταθερό ωράριο/μοτίβο). Χρειάζεται χειροκίνητη διόρθωση.`
+        );
+        break;
+      }
+    }
+
+    // --- β) Συνεχόμενες ημέρες, με τα σύνορα των γειτονικών εβδομάδων ---
+    // carry = ημέρες που κλείνει η ΠΡΟΗΓΟΥΜΕΝΗ εβδομάδα (και όταν αυτή έχει
+    // εισαχθεί από Excel), lead = ημέρες που ανοίγει η ΕΠΟΜΕΝΗ όταν είναι γνωστή.
+    const carry = st.streak || 0;
+    const lead = leadingLeaveNextWeek(w, a.id);
+    for (let guard = 0; guard < 14; guard++) {
+      let run = carry;
+      let over = -1;
+      let len = 0;
+      for (let d = 0; d < 7; d++) {
+        if (!countsAsWork(plan, d)) { run = 0; continue; }
+        run++;
+        if (run > MAX_STREAK) { over = d; len = run; break; }
+      }
+      // Η σειρά που κλείνει την Κυριακή συνεχίζεται στην επόμενη εβδομάδα
+      if (over === -1 && run > 0 && lead > 0 && run + lead > MAX_STREAK) {
+        over = 6;
+        len = run + lead;
+      }
+      if (over === -1) break;
+
+      const reason = `${len} συνεχόμενες ημέρες εργασίας μαζί με τη γειτονική εβδομάδα, όριο ${MAX_STREAK}`;
+      if (!cutSixDayStreak(w, plan, over, reason)) {
+        // Σειρά που αποτελείται αποκλειστικά από άδειες/ασθένεια (μετράνε ως
+        // εργάσιμες για το Κ10) δεν είναι εξαήμερη ΕΡΓΑΣΙΑ — δεν αναφέρεται.
+        let hasWork = false;
+        for (let d = over; d >= 0 && countsAsWork(plan, d); d--) {
+          if (worked(plan, d)) { hasWork = true; break; }
+        }
+        if (hasWork) {
+          w.report.soft.push(
+            `ΠΡΟΣΟΧΗ 6ήμερο: ${a.name} — ${len} συνεχόμενες ημέρες εργασίας (όριο ${MAX_STREAK}, μαζί με την προηγούμενη/επόμενη εβδομάδα) και δεν υπάρχει βάρδια που να μπορεί να αφαιρεθεί (σταθερά ωράρια/άδειες). Χρειάζεται χειροκίνητη διόρθωση.`
+          );
+        }
+        break;
+      }
+    }
+  }
+}
+
 // Τελική κατάσταση εβδομάδας → αρχική της επόμενης
 function computeNextState(w) {
   const { ctx } = w;
@@ -1579,6 +1752,7 @@ function generateWeek(ctx, weekStart, state, opts = {}) {
   phase1903(w, reqByDay); // Κ9 pass B (και Αγγελή, με γνωστή παρουσία)
   phaseFillers(w, reqByDay); // Κ2: όλοι στις 5 εργάσιμες
   phaseK4(w);            // οριστικοποίηση 23:00/23:30
+  phaseSixDayAudit(w);   // ΤΕΛΙΚΟΣ έλεγχος 6ημέρου (Κ2/Κ10 + προηγούμενη εβδομάδα)
   phasePairReport(w);    // Σ5 αναφορά
 
   const nextState = computeNextState(w);
