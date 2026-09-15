@@ -610,6 +610,34 @@ function phaseNights(w, nightReqByDay) {
     return null;
   };
 
+  // Πόσες ΗΜΕΡΕΣ ΕΡΓΑΣΙΑΣ μπορεί ακόμη να πιάσει ο agent την εβδομάδα αν
+  // πάρει νυχτερινή τη μέρα d (28/09/2026). Μετράει: τη νυχτερινή, όσες
+  // βάρδιες έχει ήδη, και τις κενές μέρες που είναι πραγματικά εργάσιμες —
+  // ΑΦΑΙΡΩΝΤΑΣ τις υποχρεωτικές αναπαύσεις που γεννά η ίδια η νυχτερινή
+  // (1 βράδυ → 1 ρεπό, ζευγάρι → 2 ρεπό).
+  //
+  // Χρειάζεται γιατί το ΖΕΥΓΑΡΙ βραδιών «καίει» 4 ημέρες (2 βράδια + 2
+  // αναπαύσεις): αν ο agent έχει και σταθερό ρεπό ή άδεια την ίδια εβδομάδα,
+  // δεν του μένουν αρκετές μέρες για τις 5 εργάσιμες και καταλήγει με 3ο
+  // ρεπό — χωρίς να φταίει ο έλεγχος του 6ημέρου.
+  function maxWorkDaysWithNight(a, d) {
+    const plan = w.plans.get(a.id);
+    const closingPair = d > 0 && plan.days[d - 1] && plan.days[d - 1].night;
+    const restLen = closingPair ? 2 : 1;
+    const rest = new Set();
+    for (let i = 1; i <= restLen; i++) if (d + i < 7) rest.add(d + i);
+
+    let n = 0;
+    for (let i = 0; i < 7; i++) {
+      if (i === d) { n++; continue; }        // η ίδια η νυχτερινή
+      if (rest.has(i)) continue;             // υποχρεωτική ανάπαυση μετά
+      const e = plan.days[i];
+      if (e) { if (e.type === 'work') n++; continue; } // ήδη τοποθετημένη
+      if (agentDayWorkable(w, a, i)) n++;    // κενή αλλά πραγματικά εργάσιμη
+    }
+    return n;
+  }
+
   // Ευθυγράμμιση με ΑΙΤΗΜΑΤΑ ΡΕΠΟ (14/07/2026): η υποχρεωτική ανάπαυση μετά
   // τα βράδια πρέπει να ΠΕΦΤΕΙ ΠΑΝΩ στο ζητημένο ρεπό — π.χ. αίτημα Παρασκευή
   // → βράδια Τρίτη+Τετάρτη → ρεπό Πέμπτη+Παρασκευή = σύνολο 2 ρεπό, όχι 3.
@@ -675,7 +703,26 @@ function phaseNights(w, nightReqByDay) {
       w.report.uncovered.push({ date: w.dates[d], start: '23:00', end: '07:00', label: 'Νυχτερινή Eurobank' });
       continue;
     }
-    const a = cands[0];
+    // Το 2ο βράδυ (κλείσιμο ζευγαριού) ΔΕΝ πρέπει να στερεί από τον agent τη
+    // δυνατότητα να φτάσει τις εργάσιμές του (28/09/2026): 2 βράδια + 2
+    // υποχρεωτικές αναπαύσεις = 4 ημέρες, και όποιος έχει και σταθερό ρεπό/
+    // άδεια μένει μαθηματικά με 3ο ρεπό. Όταν υπάρχει άλλος υποψήφιος, το
+    // βράδυ πάει σε εκείνον· αν ΔΕΝ υπάρχει, προηγείται η κάλυψη και
+    // κρατάμε τον αρχικό (η σειρά προτεραιότητας μένει ως έχει).
+    const feasible = cands.filter((x) => {
+      const p = w.plans.get(x.id);
+      if (nightsIn(p) !== 1) return true; // 1ο βράδυ: δεν περιορίζεται
+      return maxWorkDaysWithNight(x, d) >= workTarget(p);
+    });
+    const a = (feasible.length > 0 ? feasible : cands)[0];
+    if (feasible.length === 0 && cands.length > 0) {
+      const p = w.plans.get(cands[0].id);
+      if (nightsIn(p) === 1) {
+        w.report.soft.push(
+          `Νυχτερινή ${w.dates[d]}: ${cands[0].name} κλείνει ζευγάρι αν και θα μείνει με ${maxWorkDaysWithNight(cands[0], d)}/${workTarget(p)} εργάσιμες — δεν υπήρχε άλλος υποψήφιος.`
+        );
+      }
+    }
     if (rule(a, 'night_last_resort')) {
       w.report.soft.push(`Νυχτερινή ${w.dates[d]}: ${a.name} από ανάγκη (soft αποφυγή).`);
     }
@@ -1615,6 +1662,35 @@ function phaseSixDayAudit(w) {
         }
         break;
       }
+    }
+
+    // --- γ) ΔΙΑΓΝΩΣΗ ΠΕΡΙΤΤΩΝ ΡΕΠΟ (28/09/2026) ---
+    // Όποιος έμεινε κάτω από τις εργάσιμές του παίρνει αναγκαστικά 3ο ρεπό.
+    // Δεν «διορθώνεται» με το ζόρι (θα έσπαγε το 6ήμερο ή το ΣΚ MAX) — αλλά
+    // ΕΞΗΓΕΙΤΑΙ, ώστε ο χρήστης να βλέπει αν φταίει η συνέχεια της
+    // προηγούμενης εβδομάδας, τα βράδια, ή άδειες/σταθερά ρεπό.
+    const deficit = workTarget(plan) - assignedCount(plan);
+    if (deficit > 0) {
+      const causes = [];
+      if (carry > 0) {
+        causes.push(`ήρθε με ${carry} συνεχόμενες ημέρες από την προηγούμενη εβδομάδα (μπορεί να δουλέψει το πολύ ${MAX_STREAK - carry} σερί από Δευτέρα)`);
+      }
+      const nights = plan.days.filter((e) => e && e.type === 'work' && e.night).length;
+      const nightRest = plan.days.filter((e) => e && e.type === 'off' && e.reason === 'night_rest').length;
+      if (nights > 0) causes.push(`${nights} νυχτερινή/ές + ${nightRest} υποχρεωτική/ές ανάπαυση/εις`);
+      const fixedOff = plan.days.filter((e) => e && e.type === 'off' && e.reason === 'fixed_off').length;
+      if (fixedOff > 0) causes.push(`${fixedOff} σταθερό/ά ρεπό`);
+      const req = plan.days.filter((e) => e && e.type === 'off' && e.reason === 'repo_request').length;
+      if (req > 0) causes.push(`${req} αίτημα/τα ρεπό`);
+      if (plan.leaveDays > 0) causes.push(`${plan.leaveDays} ημέρες άδειας/ασθένειας`);
+      const wkndFree = [5, 6].filter((d) => {
+        const e = plan.days[d];
+        return e && e.type === 'off' && e.reason === 'repo';
+      }).length;
+      if (wkndFree > 0) causes.push(`${wkndFree} ημέρα/ες ΣΚ χωρίς ελεύθερη θέση στον πίνακα απαιτήσεων (ΣΚ MAX)`);
+      w.report.soft.push(
+        `Περιττό ρεπό: ${a.name} — ${assignedCount(plan)}/${workTarget(plan)} εργάσιμες. Αιτία: ${causes.length ? causes.join(' · ') : 'δεν βρέθηκε επιτρεπτό ωράριο στις ελεύθερες ημέρες'}.`
+      );
     }
   }
 }
