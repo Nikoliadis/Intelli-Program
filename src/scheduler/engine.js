@@ -31,6 +31,13 @@ function isEveningStart(start) {
   return toMin(start) >= 1140;
 }
 
+// prefer_morning_evening (ALIGIA LORENTSO): πόσο «βαραίνει» μια απογευματινή.
+// ΠΡΟΤΙΜΗΣΗ, ΟΧΙ ΑΠΟΚΛΕΙΣΜΟΣ (16/09/2026): με πολύ μεγάλη ποινή δεν έπαιρνε
+// ΚΑΜΙΑ απογευματινή. Η τιμή είναι ρυθμισμένη ώστε να μπαίνει πού και πού,
+// μένοντας σαφής μειοψηφία μπροστά στις πρωινές/βραδινές. Ρυθμίζεται και ανά
+// agent με { type: 'prefer_morning_evening', penalty: <αριθμός> }.
+const AFTERNOON_SOFT_PENALTY = 12;
+
 // Έλεγχος τμήματος απαίτησης: 'verification+call' σημαίνει ότι ο agent
 // πρέπει να έχει ΚΑΙ τα δύο τμήματα (π.χ. Verification & call slots —
 // απόφαση προϊσταμένου 10/07/2026: τα κάνει ΜΟΝΟ όποιος έχει ταμπέλα call).
@@ -1099,9 +1106,10 @@ function phaseRequirements(w, reqByDay, opts = {}) {
           // ALIGIA LORENTSO (05/09/2026): προτιμώνται ΠΡΩΙΝΕΣ και ΒΡΑΔΙΝΕΣ,
           // οι απογευματινές όσο γίνεται λιγότερες. SOFT — δεν αποκλείει την
           // απογευματινή όταν δεν βγαίνει αλλιώς η κάλυψη.
-          if (rule(a, 'prefer_morning_evening')) {
+          const pme = rule(a, 'prefer_morning_evening');
+          if (pme) {
             if (isMorning(shS, shE) || isEveningStart(shS)) score += 15;
-            else if (isAfternoon(shS)) score -= 45;
+            else if (isAfternoon(shS)) score -= (pme.penalty != null ? pme.penalty : AFTERNOON_SOFT_PENALTY);
           }
           // Διατήρηση ευελιξίας: όσοι μπορούν ΜΟΝΟ αυτό το είδος βάρδιας
           // προηγούνται, ώστε οι ευέλικτοι να μένουν για τις υπόλοιπες
